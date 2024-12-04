@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Explorer</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Bus Explorer</h1>
+    <label for="frequency">Frequency (min):</label>
+    <input type="range" id="frequency" name="frequency" min="1" max="60" value="30" oninput="updateValue(this, 'frequencyValue')">
+    <span id="frequencyValue">30</span> min
+
+    <label for="distance">Distance (feet):</label>
+    <input type="range" id="distance" name="distance" min="100" max="5280" value="1000" oninput="updateValue(this, 'distanceValue')">
+    <span id="distanceValue">1000</span> feet
+
+    <button onclick="fetchStops()">Find Stops</button>
+    <ul id="results"></ul>
+
+    <script>
+        function updateValue(slider, spanId) {
+            document.getElementById(spanId).textContent = slider.value;
+        }
+
+        async function fetchStops() {
+            const frequency = document.getElementById('frequency').value;
+            const distance = document.getElementById('distance').value;
+            const lat = 44.9778; // Mock location
+            const lng = -93.2650;
+
+            const response = await axios.get(`/api/stops`, { params: { lat, lng, radius: distance, frequency } });
+            const results = response.data;
+
+            const resultList = document.getElementById('results');
+            resultList.innerHTML = '';
+            results.forEach(stop => {
+                const li = document.createElement('li');
+                li.textContent = `${stop.name} (${stop.lat}, ${stop.lng})`;
+                resultList.appendChild(li);
+            });
+        }
+    </script>
+</body>
+</html>
