@@ -1,14 +1,17 @@
+from dotenv import load_dotenv
 import os
+
+load_dotenv()
 
 class Config:
     # General Configurations
     DEBUG = False
     TESTING = False
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'your_default_secret_key')  # Replace with a secure key
+    SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_key')
     FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
 
     # Google Maps API Key
-    GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', 'your_default_google_maps_api_key')
+    GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
 
 class DevelopmentConfig(Config):
     DEBUG = True
