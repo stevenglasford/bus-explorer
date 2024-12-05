@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Routes</title>
+</head>
+<body>
+    <h1>Metro Transit Routes</h1>
+    <ul>
+        {% for route in routes %}
+            <li>{{ route.route_label }} (ID: {{ route.route_id }})</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

@@ -1,9 +1,23 @@
-import googlemaps
+import requests
 
-gmaps = googlemaps.Client(key="YOUR_GOOGLE_MAPS_API_KEY")
+BASE_URL = "https://svc.metrotransit.org/nextrip"  # Replace with the actual API base URL if different.
 
-def get_nearby_stops(lat, lng, radius, frequency):
-    # Fetch bus stops near the given coordinates
-    places = gmaps.places_nearby(location=(lat, lng), radius=radius, type='bus_station')
-    # Filter results based on frequency (mock data or actual API)
-    return [{"name": place['name'], "lat": place['geometry']['location']['lat'], "lng": place['geometry']['location']['lng']} for place in places['results']]
+def fetch_routes():
+    response = requests.get(f"{BASE_URL}/routes")
+    response.raise_for_status()
+    return response.json()
+
+def fetch_stops(route_id, direction_id):
+    response = requests.get(f"{BASE_URL}/stops/{route_id}/{direction_id}")
+    response.raise_for_status()
+    return response.json()
+
+def fetch_departures(stop_id):
+    response = requests.get(f"{BASE_URL}/{stop_id}")
+    response.raise_for_status()
+    return response.json()
+
+def fetch_vehicles(route_id):
+    response = requests.get(f"{BASE_URL}/vehicles/{route_id}")
+    response.raise_for_status()
+    return response.json()
