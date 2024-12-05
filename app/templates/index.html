@@ -31,6 +31,78 @@
 
     <script>
         let userLat, userLng;
+    
+        async function fetchStopsAndRoutes() {
+            const distance = document.getElementById("distance").value;
+            const frequency = document.getElementById("frequency").value;
+    
+            // Fetch stops nearby
+            const stopsResponse = await fetch(`/api/stops?lat=${userLat}&lng=${userLng}&distance=${distance}`);
+            const stops = await stopsResponse.json();
+    
+            // Fetch routes for each stop
+            const routesResponse = await fetch(`/api/routes?stops=${JSON.stringify(stops.map(stop => stop.stop_id))}`);
+            const routes = await routesResponse.json();
+    
+            // Clear and update UI
+            const stopsList = document.getElementById("stops-list");
+            const routesList = document.getElementById("routes-list");
+            stopsList.innerHTML = "";
+            routesList.innerHTML = "";
+    
+            stops.forEach(stop => {
+                const li = document.createElement("li");
+                li.textContent = `${stop.description} (${stop.latitude}, ${stop.longitude})`;
+                stopsList.appendChild(li);
+            });
+    
+            routes.forEach(route => {
+                const button = document.createElement("button");
+                button.textContent = `${route.route_label}`;
+                button.style.backgroundColor = route.is_frequent ? "green" : "red";
+                routesList.appendChild(button);
+            });
+        }
+    
+        async function updateData() {
+            if (!userLat || !userLng) {
+                alert("Location not yet determined.");
+                return;
+            }
+            await fetchStopsAndRoutes();
+        }
+    
+        // Call updateData when sliders change
+        document.getElementById("distance").addEventListener("input", updateData);
+        document.getElementById("frequency").addEventListener("input", updateData);
+    
+        window.onload = async () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLat = position.coords.latitude;
+                        userLng = position.coords.longitude;
+                        fetchStopsAndRoutes(); // Initial fetch
+                    },
+                    (error) => {
+                        console.error("Error fetching location:", error);
+                        alert("Please enable location services.");
+                    }
+                );
+            }
+        };
+    </script>
+    
+    <div>
+        <h2>Stops Nearby</h2>
+        <ul id="stops-list"></ul>
+    
+        <h2>Routes</h2>
+        <div id="routes-list"></div>
+    </div>
+    
+
+    <script>
         let map, userMarker;
 
         function updateValue(slider, spanId) {

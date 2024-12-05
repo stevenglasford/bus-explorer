@@ -3,6 +3,8 @@ from math import radians, sin, cos, sqrt, atan2
 from .services import fetch_routes
 from .services import fetch_stops
 from .services import fetch_departures
+from .services import fetch_stops_nearby, check_route_frequency
+
 
 # Define a Blueprint
 main = Blueprint('main', __name__)
@@ -57,3 +59,24 @@ def departures():
         return jsonify(departures)
     except requests.HTTPError as e:
         return jsonify({"error": str(e)}), 500    
+    
+@main.route('/api/stops', methods=['GET'])
+def stops():
+    user_lat = float(request.args.get('lat'))
+    user_lng = float(request.args.get('lng'))
+    max_distance = float(request.args.get('distance'))
+
+    stops = fetch_stops_nearby(user_lat, user_lng, max_distance)
+    return jsonify(stops)
+
+@main.route('/api/routes', methods=['GET'])
+def routes():
+    stop_ids = request.args.getlist('stops')
+    frequency_limit = int(request.args.get('frequency'))
+
+    routes = []
+    for stop_id in stop_ids:
+        is_frequent = check_route_frequency(stop_id, frequency_limit)
+        routes.append({"route_id": stop_id, "is_frequent": is_frequent})
+
+    return jsonify(routes)
