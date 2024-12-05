@@ -49,7 +49,11 @@
     <span id="distanceValue">1000</span> feet
 
     <br />
-
+    
+    <button id="get-routes-btn">Get Routes and Stops</button>
+    <div id="routes-list"></div>
+    <br />
+    
     <button onclick="fetchRoutesAndStops()">Get Routes and Stops</button>
 
     <div id="map"></div>
@@ -106,55 +110,39 @@
         }
 
         async function fetchRoutesAndStops() {
+            const distance = document.getElementById("distance").value;
+            const frequency = document.getElementById("frequency").value;
+
             if (!userLat || !userLng) {
                 alert("Location not yet determined.");
                 return;
             }
 
-            const distance = document.getElementById("distance").value;
-            const frequency = document.getElementById("frequency").value;
-
             try {
-                // Fetch stops within the distance
-                const stopsResponse = await axios.get(`/api/stops`, {
-                    params: { lat: userLat, lng: userLng, distance }
-                });
-                const stops = stopsResponse.data;
-
-                // Fetch routes with frequency check
-                const routesResponse = await axios.get(`/api/routes`, {
-                    params: {
-                        stops: stops.map(stop => stop.stop_id),
-                        frequency
-                    }
-                });
-                const routes = routesResponse.data;
-
-                // Update stops list
-                const stopsList = document.getElementById("stops-list");
-                stopsList.innerHTML = "";
-                stops.forEach(stop => {
-                    const li = document.createElement("li");
-                    li.textContent = `${stop.description} (${stop.latitude}, ${stop.longitude})`;
-                    stopsList.appendChild(li);
+                const response = await axios.get("/api/routes", {
+                    params: { lat: userLat, lon: userLng, radius: distance, frequency }
                 });
 
-                // Update routes list
+                const data = response.data;
+
+                // Update the routes list
                 const routesList = document.getElementById("routes-list");
                 routesList.innerHTML = "";
-                routes.forEach(route => {
+
+                data.forEach((route) => {
                     const button = document.createElement("button");
-                    button.textContent = `Route ${route.route_id}`;
-                    button.className = `route-btn ${route.is_frequent ? "green" : "red"}`;
+                    button.textContent = `Route ${route.route_id} - ${route.description}`;
+                    button.className = `route-btn ${route.meets_frequency ? "green" : "red"}`;
                     routesList.appendChild(button);
                 });
             } catch (error) {
-                console.error("Error fetching routes or stops:", error);
+                console.error("Error fetching routes and stops:", error);
                 alert("There was an error fetching the data. Please try again.");
             }
         }
 
         // Get user location on page load
+        document.getElementById("get-routes-btn").addEventListener("click", fetchRoutesAndStops);
         window.onload = getUserLocation;
     </script>
 </body>

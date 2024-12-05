@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request
 from math import radians, sin, cos, sqrt, atan2
-from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency
+from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency, fetch_osm_bus_stops, fetch_stop_departures, calculate_frequency
+
 
 # Define a Blueprint
 main = Blueprint('main', __name__)
@@ -75,3 +76,42 @@ def routes_by_frequency():
         routes.append({"route_id": stop_id, "is_frequent": is_frequent})
 
     return jsonify(routes)
+
+def get_routes_and_stops():
+    user_lat = float(request.args.get('lat'))
+    user_lon = float(request.args.get('lon'))
+    radius = float(request.args.get('radius'))
+    frequency_limit = float(request.args.get('frequency'))
+
+    try:
+        # Fetch nearby stops from OSM
+        osm_stops = fetch_osm_bus_stops(user_lat, user_lon, radius)
+        results = []
+
+        for stop in osm_stops:
+            # Use `metcouncil:site_id` to query Metro Transit API
+            stop_id = stop.get("tags", {}).get("metcouncil:site_id")
+            if not stop_id:
+                continue
+
+            stop_data = fetch_stop_departures(stop_id)
+            departures = stop_data.get("departures", [])
+            current_time = int(datetime.now().timestamp())
+            avg_frequency = calculate_frequency(departures, current_time)
+
+            # Determine if the route meets the frequency criteria
+            for dep in departures:
+                route_id = dep["route_id"]
+                meets_frequency = avg_frequency is not None and avg_frequency <= frequency_limit
+
+                results.append({
+                    "stop_id": stop_id,
+                    "route_id": route_id,
+                    "description": stop_data.get("stops", [{}])[0].get("description", ""),
+                    "frequency": avg_frequency,
+                    "meets_frequency": meets_frequency,
+                })
+
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
