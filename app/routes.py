@@ -66,16 +66,16 @@ def stops_nearby():
     return jsonify(stops)
 
 @main.route('/api/routes', methods=['GET'])
-def routes_by_frequency():
-    stop_ids = request.args.getlist('stops')
-    frequency_limit = int(request.args.get('frequency'))
+# def routes_by_frequency():
+#     stop_ids = request.args.getlist('stops')
+#     frequency_limit = int(request.args.get('frequency'))
 
-    routes = []
-    for stop_id in stop_ids:
-        is_frequent = check_route_frequency(stop_id, frequency_limit)
-        routes.append({"route_id": stop_id, "is_frequent": is_frequent})
+#     routes = []
+#     for stop_id in stop_ids:
+#         is_frequent = check_route_frequency(stop_id, frequency_limit)
+#         routes.append({"route_id": stop_id, "is_frequent": is_frequent})
 
-    return jsonify(routes)
+#     return jsonify(routes)
 
 def get_routes_and_stops():
     user_lat = float(request.args.get('lat'))
@@ -100,6 +100,7 @@ def get_routes_and_stops():
             avg_frequency = calculate_frequency(departures, current_time)
 
             # Determine if the route meets the frequency criteria
+            print(departures)
             for dep in departures:
                 route_id = dep["route_id"]
                 meets_frequency = avg_frequency is not None and avg_frequency <= frequency_limit
@@ -111,7 +112,7 @@ def get_routes_and_stops():
                     "frequency": avg_frequency,
                     "meets_frequency": meets_frequency,
                 })
-
+            
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

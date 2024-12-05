@@ -9,9 +9,11 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         #map {
-            height: 400px;
-            width: 100%;
+            height: 300px; /* Reduced height */
+            width: 80%; /* Adjust width as needed */
             margin-top: 20px;
+            border: 1px solid #ccc; /* Optional: Add a border for better visibility */
+            border-radius: 8px; /* Optional: Add rounded corners */
         }
         button {
             margin-top: 10px;
@@ -53,7 +55,7 @@
     <button id="get-routes-btn">Get Routes and Stops</button>
     <div id="routes-list"></div>
     <br />
-    
+
     <button onclick="fetchRoutesAndStops()">Get Routes and Stops</button>
 
     <div id="map"></div>
