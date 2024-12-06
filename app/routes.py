@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, jsonify, request
 from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
 from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency, fetch_osm_bus_stops, fetch_stop_departures, calculate_frequency, fetch_osm_bus_stops, fetch_all_departures, calculate_frequency
-
+import asyncio
 
 # Define a Blueprint
 main = Blueprint('main', __name__)
@@ -77,40 +77,67 @@ def get_routes_and_stops():
         # Fetch nearby stops from OSM
         osm_stops = fetch_osm_bus_stops(user_lat, user_lon, radius)
 
-        # Collect all `metcouncil:site_id` values
-        stop_ids = [
-            stop.get("tags", {}).get("metcouncil:site_id")
+        # Collect all `metcouncil:site_id` values and their locations
+        stops_info = [
+            {
+                "stop_id": stop.get("tags", {}).get("metcouncil:site_id"),
+                "latitude": stop.get("lat"),
+                "longitude": stop.get("lon")
+            }
             for stop in osm_stops if stop.get("tags", {}).get("metcouncil:site_id")
         ]
+
+        stop_ids = [stop["stop_id"] for stop in stops_info]
 
         # Fetch departures for all stops asynchronously
         departure_data = asyncio.run(fetch_all_departures(stop_ids))
 
-        results = []
+        # Find the closest stop for each route
+        closest_stops = {}
         current_time = int(datetime.now().timestamp())
 
-        for stop, stop_data in zip(stop_ids, departure_data):
+        for stop_info, stop_data in zip(stops_info, departure_data):
             if not stop_data or "departures" not in stop_data:
                 continue
 
             departures = stop_data["departures"]
-            avg_frequency = calculate_frequency(departures, current_time)
 
-            # Determine if routes meet frequency criteria
+            # Calculate distance from user to this stop
+            stop_distance = calculate_distance(
+                user_lat, user_lon, stop_info["latitude"], stop_info["longitude"]
+            )
+
             for dep in departures:
                 route_id = dep.get("route_id")
                 if not route_id:
                     continue
 
-                meets_frequency = avg_frequency is not None and avg_frequency <= frequency_limit
+                # Check if this stop is closer for this route
+                if (
+                    route_id not in closest_stops
+                    or stop_distance < closest_stops[route_id]["distance"]
+                ):
+                    closest_stops[route_id] = {
+                        "stop_id": stop_info["stop_id"],
+                        "description": stop_data.get("stops", [{}])[0].get("description", ""),
+                        "distance": stop_distance,
+                        "frequency": calculate_frequency(departures, current_time),
+                        "meets_frequency": calculate_frequency(departures, current_time)
+                        and calculate_frequency(departures, current_time) <= frequency_limit,
+                    }
 
-                results.append({
-                    "stop_id": stop,
-                    "route_id": route_id,
-                    "description": stop_data.get("stops", [{}])[0].get("description", ""),
-                    "frequency": avg_frequency,
-                    "meets_frequency": meets_frequency,
-                })
+        # Format results
+        results = [
+            {
+                "route_id": route_id,
+                "stop_id": info["stop_id"],
+                "description": info["description"],
+                "distance": info["distance"],
+                "frequency": info["frequency"],
+                "meets_frequency": info["meets_frequency"],
+            }
+            for route_id, info in closest_stops.items()
+        ]
 
         return jsonify(results)
     except Exception as e:
