@@ -89,30 +89,44 @@ def get_routes_and_stops():
         results = []
 
         for stop in osm_stops:
-            # Use `metcouncil:site_id` to query Metro Transit API
-            stop_id = stop.get("tags", {}).get("metcouncil:site_id")
-            if not stop_id:
-                continue
+            try:
+                # Use `metcouncil:site_id` to query Metro Transit API
+                stop_id = stop.get("tags", {}).get("metcouncil:site_id")
+                if not stop_id:
+                    print(f"Skipping stop without metcouncil:site_id: {stop}")
+                    continue
 
-            stop_data = fetch_stop_departures(stop_id)
-            departures = stop_data.get("departures", [])
-            current_time = int(datetime.now().timestamp())
-            avg_frequency = calculate_frequency(departures, current_time)
+                print(f"Processing stop_id: {stop_id}")
+                stop_data = fetch_stop_departures(stop_id)
+                if "departures" not in stop_data:
+                    print(f"No departures found for stop_id: {stop_id}")
+                    continue
 
-            # Determine if the route meets the frequency criteria
-            print(departures)
-            for dep in departures:
-                route_id = dep["route_id"]
-                meets_frequency = avg_frequency is not None and avg_frequency <= frequency_limit
+                departures = stop_data.get("departures", [])
+                current_time = int(datetime.now().timestamp())
+                avg_frequency = calculate_frequency(departures, current_time)
 
-                results.append({
-                    "stop_id": stop_id,
-                    "route_id": route_id,
-                    "description": stop_data.get("stops", [{}])[0].get("description", ""),
-                    "frequency": avg_frequency,
-                    "meets_frequency": meets_frequency,
-                })
-            
+                # Determine if the route meets the frequency criteria
+                for dep in departures:
+                    route_id = dep.get("route_id")
+                    if not route_id:
+                        print(f"Skipping departure without route_id: {dep}")
+                        continue
+
+                    meets_frequency = avg_frequency is not None and avg_frequency <= frequency_limit
+
+                    results.append({
+                        "stop_id": stop_id,
+                        "route_id": route_id,
+                        "description": stop_data.get("stops", [{}])[0].get("description", ""),
+                        "frequency": avg_frequency,
+                        "meets_frequency": meets_frequency,
+                    })
+            except Exception as inner_error:
+                print(f"Error processing stop {stop}: {inner_error}")
+                continue  # Skip to the next stop in case of an error
+
         return jsonify(results)
     except Exception as e:
+        print(f"Error fetching routes and stops: {e}")
         return jsonify({"error": str(e)}), 500
