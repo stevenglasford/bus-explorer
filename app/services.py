@@ -1,6 +1,8 @@
 from datetime import datetime
 import requests
 from math import radians, sin, cos, sqrt, atan2
+import aiohttp
+import asyncio
 
 OSM_API_URL = "https://overpass-api.de/api/interpreter"
 METRO_TRANSIT_API_URL = "https://svc.metrotransit.org/nextrip"
@@ -98,3 +100,17 @@ def fetch_vehicles(route_id):
     response = requests.get(f"{METRO_TRANSIT_API_URL}/vehicles/{route_id}")
     response.raise_for_status()
     return response.json()
+
+async def fetch_departure_data(session, stop_id):
+    """Fetch departures for a single stop asynchronously."""
+    async with session.get(f"{METRO_TRANSIT_API_URL}/{stop_id}") as response:
+        if response.status == 200:
+            return await response.json()
+        else:
+            return None
+
+async def fetch_all_departures(stop_ids):
+    """Fetch departures for all stops in parallel."""
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_departure_data(session, stop_id) for stop_id in stop_ids]
+        return await asyncio.gather(*tasks)
