@@ -1,2 +1,3 @@
 Flask==2.2.2
-googlemaps==4.4.0
+googlemaps
+werkzeug<3

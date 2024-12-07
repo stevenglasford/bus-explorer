@@ -8,6 +8,29 @@
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
+        #loading-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
         #map {
             height: 300px; /* Reduced height */
             width: 80%; /* Adjust width as needed */
@@ -103,6 +126,7 @@
             }
         }
 
+        
         async function fetchRoutesAndStops() {
             const distance = document.getElementById("distance").value;
             const frequency = document.getElementById("frequency").value;
@@ -112,12 +136,19 @@
                 return;
             }
 
+            // Show loading spinner
+            const loadingContainer = document.getElementById("loading-container");
+            loadingContainer.style.display = "block";
+
             try {
                 const response = await axios.get("/api/routes", {
                     params: { lat: userLat, lon: userLng, radius: distance, frequency }
                 });
 
                 const data = response.data;
+
+                // Hide loading spinner
+                loadingContainer.style.display = "none";
 
                 // Update the routes list
                 const routesList = document.getElementById("routes-list");
@@ -132,9 +163,13 @@
             } catch (error) {
                 console.error("Error fetching routes and stops:", error);
                 alert("There was an error fetching the data. Please try again.");
+                
+                // Hide loading spinner
+                loadingContainer.style.display = "none";
             }
-        }
+    }
 
+    document.getElementById("get-routes-btn").addEventListener("click", fetchRoutesAndStops);
         // Get user location on page load
         document.getElementById("get-routes-btn").addEventListener("click", fetchRoutesAndStops);
         window.onload = getUserLocation;

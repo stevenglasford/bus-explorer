@@ -3,6 +3,7 @@ from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
 from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency, fetch_osm_bus_stops, fetch_stop_departures, calculate_frequency, fetch_osm_bus_stops, fetch_all_departures, calculate_frequency
 import asyncio
+import requests
 
 # Define a Blueprint
 main = Blueprint('main', __name__)
@@ -12,12 +13,41 @@ def index():
     return render_template('index.html')
 
 def calculate_distance(lat1, lon1, lat2, lon2):
-    R = 6371  # Radius of the Earth in km
-    dlat = radians(lat2 - lat1)
-    dlon = radians(lon2 - lon1)
-    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    """
+    Calculate the great-circle distance between two points on Earth using the Haversine formula.
+    :param lat1: Latitude of the first point in decimal degrees
+    :param lon1: Longitude of the first point in decimal degrees
+    :param lat2: Latitude of the second point in decimal degrees
+    :param lon2: Longitude of the second point in decimal degrees
+    :return: Distance in feet
+    """
+    R = 20902840  # Earth's radius in feet
+
+    # Convert latitude and longitude from degrees to radians
+    phi1, phi2 = radians(lat1), radians(lat2)
+    delta_phi = radians(lat2 - lat1)
+    delta_lambda = radians(lon2 - lon1)
+
+    # Haversine formula
+    a = sin(delta_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(delta_lambda / 2) ** 2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return R * c * 1000  # Convert to meters
+    distance = R * c
+
+    return distance
+
+def get_walking_distance(lat1, lon1, lat2, lon2):
+    url = f"http://router.project-osrm.org/route/v1/walking/{lon1},{lat1};{lon2},{lat2}?overview=false"
+    response = requests.get(url)
+    data = response.json()
+
+    if "routes" in data and len(data["routes"]) > 0:
+        return data["routes"][0]["distance"]  # Distance in meters
+    else:
+        return None
+
+# # Example usage
+# walking_distance = get_walking_distance(user_lat, user_lon, stop_lat, stop_lon)
+# print(f"Walking Distance: {walking_distance / 1609.34:.2f} miles")
 
 def filter_stops_by_distance(stops, user_lat, user_lon, max_distance):
     return [
@@ -77,19 +107,24 @@ def get_routes_and_stops():
         # Fetch nearby stops from OSM
         osm_stops = fetch_osm_bus_stops(user_lat, user_lon, radius)
 
-        # Collect all `metcouncil:site_id` values and their locations
-        stops_info = [
-            {
-                "stop_id": stop.get("tags", {}).get("metcouncil:site_id"),
-                "latitude": stop.get("lat"),
-                "longitude": stop.get("lon")
-            }
-            for stop in osm_stops if stop.get("tags", {}).get("metcouncil:site_id")
-        ]
+        # Collect all stops with their routes
+        stops_info = []
+        for stop in osm_stops:
+            route_string = stop.get("tags", {}).get("route", "")
+            stop_id = stop.get("tags", {}).get("metcouncil:site_id")
+            if not stop_id or not route_string:
+                continue
 
-        stop_ids = [stop["stop_id"] for stop in stops_info]
+            routes = route_string.split()  # Split space-separated route numbers
+            stops_info.append({
+                "stop_id": stop_id,
+                "latitude": stop.get("lat"),
+                "longitude": stop.get("lon"),
+                "routes": routes
+            })
 
         # Fetch departures for all stops asynchronously
+        stop_ids = [stop["stop_id"] for stop in stops_info]
         departure_data = asyncio.run(fetch_all_departures(stop_ids))
 
         # Find the closest stop for each route
@@ -100,30 +135,27 @@ def get_routes_and_stops():
             if not stop_data or "departures" not in stop_data:
                 continue
 
-            departures = stop_data["departures"]
-
-            # Calculate distance from user to this stop
             stop_distance = calculate_distance(
                 user_lat, user_lon, stop_info["latitude"], stop_info["longitude"]
             )
 
-            for dep in departures:
-                route_id = dep.get("route_id")
-                if not route_id:
-                    continue
-
+            for route in stop_info["routes"]:
                 # Check if this stop is closer for this route
                 if (
-                    route_id not in closest_stops
-                    or stop_distance < closest_stops[route_id]["distance"]
+                    route not in closest_stops
+                    or stop_distance < closest_stops[route]["distance"]
                 ):
-                    closest_stops[route_id] = {
+                    departures = [
+                        dep for dep in stop_data["departures"] if dep["route_id"] == route
+                    ]
+                    avg_frequency = calculate_frequency(departures, current_time)
+
+                    closest_stops[route] = {
                         "stop_id": stop_info["stop_id"],
                         "description": stop_data.get("stops", [{}])[0].get("description", ""),
                         "distance": stop_distance,
-                        "frequency": calculate_frequency(departures, current_time),
-                        "meets_frequency": calculate_frequency(departures, current_time)
-                        and calculate_frequency(departures, current_time) <= frequency_limit,
+                        "frequency": avg_frequency,
+                        "meets_frequency": avg_frequency is not None and avg_frequency <= frequency_limit,
                     }
 
         # Format results
