@@ -140,22 +140,38 @@ def get_routes_and_stops():
             )
 
             for route in stop_info["routes"]:
+                # Filter departures for this route
+                departures = [
+                    dep for dep in stop_data["departures"] if dep["route_id"] == route
+                ]
+
+                # Count the number of valid departures
+                num_departures = len(departures)
+
+                # Determine the route's color
+                if num_departures == 0:
+                    color = "white"  # No buses scheduled
+                elif num_departures <= 2:
+                    color = "black"  # Few buses remaining
+                else:
+                    avg_frequency = calculate_frequency(departures, current_time)
+                    color = (
+                        "green" if avg_frequency is not None and avg_frequency <= frequency_limit
+                        else "red"
+                    )
+
                 # Check if this stop is closer for this route
                 if (
                     route not in closest_stops
                     or stop_distance < closest_stops[route]["distance"]
                 ):
-                    departures = [
-                        dep for dep in stop_data["departures"] if dep["route_id"] == route
-                    ]
-                    avg_frequency = calculate_frequency(departures, current_time)
-
                     closest_stops[route] = {
                         "stop_id": stop_info["stop_id"],
                         "description": stop_data.get("stops", [{}])[0].get("description", ""),
                         "distance": stop_distance,
-                        "frequency": avg_frequency,
-                        "meets_frequency": avg_frequency is not None and avg_frequency <= frequency_limit,
+                        "frequency": calculate_frequency(departures, current_time),
+                        "num_departures": num_departures,
+                        "color": color,
                     }
 
         # Format results
@@ -166,7 +182,8 @@ def get_routes_and_stops():
                 "description": info["description"],
                 "distance": info["distance"],
                 "frequency": info["frequency"],
-                "meets_frequency": info["meets_frequency"],
+                "num_departures": info["num_departures"],
+                "color": info["color"],
             }
             for route_id, info in closest_stops.items()
         ]
