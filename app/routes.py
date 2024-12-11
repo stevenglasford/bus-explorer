@@ -30,27 +30,14 @@ def schedule_page():
     return render_template('schedule.html')
 
 def calculate_distance(lat1, lon1, lat2, lon2):
-    """
-    Calculate the great-circle distance between two points on Earth using the Haversine formula.
-    :param lat1: Latitude of the first point in decimal degrees
-    :param lon1: Longitude of the first point in decimal degrees
-    :param lat2: Latitude of the second point in decimal degrees
-    :param lon2: Longitude of the second point in decimal degrees
-    :return: Distance in feet
-    """
-    R = 20902840  # Earth's radius in feet
-
-    # Convert latitude and longitude from degrees to radians
-    phi1, phi2 = radians(lat1), radians(lat2)
-    delta_phi = radians(lat2 - lat1)
-    delta_lambda = radians(lon2 - lon1)
-
-    # Haversine formula
-    a = sin(delta_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(delta_lambda / 2) ** 2
+    """Calculate the distance in feet between two lat/lon points using the Haversine formula."""
+    R = 6371000  # Radius of Earth in meters
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    distance = R * c
-
-    return distance
+    distance_meters = R * c
+    return distance_meters * 3.28084  # Convert to feet
 
 def get_walking_distance(lat1, lon1, lat2, lon2):
     url = f"http://router.project-osrm.org/route/v1/walking/{lon1},{lat1};{lon2},{lat2}?overview=false"
@@ -300,46 +287,48 @@ def schedule_nearby():
     """Find nearby stops and parse GTFS data for routes and branches."""
     try:
         # Get user input
-        lat = float(request.args.get("lat"))
-        lon = float(request.args.get("lon"))
-        distance_feet = int(request.args.get("distance"))
+        user_lat = float(request.args.get("lat"))
+        user_lon = float(request.args.get("lon"))
+        distance_feet = float(request.args.get("distance"))
 
-        # Step 1: Query OSM for nearby stops
-        print("querying osm") #debugging
-        osm_stops = get_nearby_stops(lat, lon, distance_feet)
-        osm_stop_ids = [
-            stop.get("tags", {}).get("metro_council:site_id")
-            for stop in osm_stops
-            if stop.get("tags", {}).get("metro_council:site_id")
-        ]
-
-        # Step 2: Load GTFS data
-        print("loading gtfs data") #debugging
+        # Load GTFS data
         gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
         with zipfile.ZipFile(gtfs_path, 'r') as z:
+            with z.open('stops.txt') as f:
+                stops = pd.read_csv(f)
             with z.open('stop_times.txt') as f:
                 stop_times = pd.read_csv(f)
             with z.open('trips.txt') as f:
                 trips = pd.read_csv(f)
 
-        # Step 3: Filter stop_times by stop_id
-        print("filtering stops") #debugging
-        filtered_stop_times = stop_times[stop_times["stop_id"].isin(osm_stop_ids)]
+        # Step 1: Filter stops by distance
+        stops["distance"] = stops.apply(
+            lambda row: calculate_distance(user_lat, user_lon, row["stop_lat"], row["stop_lon"]),
+            axis=1,
+        )
+        nearby_stops = stops[stops["distance"] <= distance_feet]
+        nearby_stop_ids = nearby_stops["stop_id"].astype(str).tolist()
 
-        # Step 4: Join with trips to get route_id and branch_letter
-        print("filtering stop times") #debugging
-        routes = filtered_stop_times.merge(trips, on="trip_id")[["route_id", "branch_letter"]] 
-        
-        print("finding unique routes") #debugging  
-        unique_routes = routes.drop_duplicates()
+        # Debugging: Check nearby stops
+        print("Nearby Stops:", nearby_stops)
 
-        # Step 5: Create unique buttons
-        print("creating buttons") #debugging
+        # Step 2: Filter stop_times by nearby stop IDs
+        matching_trip_ids = stop_times[stop_times["stop_id"].astype(str).isin(nearby_stop_ids)]["trip_id"].unique()
+
+        # Debugging: Check matching trip IDs
+        print("Matching Trip IDs:", matching_trip_ids)
+
+        # Step 3: Find unique route and branch combinations
+        unique_routes = trips[trips["trip_id"].isin(matching_trip_ids)][["route_id", "branch_letter"]].drop_duplicates()
+
+        # Debugging: Check unique routes
+        print("Unique Routes:", unique_routes)
+
+        # Step 4: Format buttons as "route_id + branch_letter"
         buttons = [
             f"{row['route_id']}{row['branch_letter']}" for _, row in unique_routes.iterrows()
         ]
-        
-        print("returning buttons") #debugging
+
         return jsonify(sorted(buttons))
     except Exception as e:
-        return jsonify({"error at /api/schedule/nearby": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
