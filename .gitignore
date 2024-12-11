@@ -5,3 +5,4 @@ env/
 venv/
 .env
 app/static/metro_test_data
+.venv/
