@@ -25,6 +25,12 @@ function hideLoading() {
     loadingText.style.display = "none";
 }
 
+// Update the user's latitude and longitude on the screen
+function updateLocationDisplay(lat, lon) {
+    const locationElement = document.getElementById("user-location");
+    locationElement.textContent = `Your Location: Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
+}
+
 // Fetch nearby stops
 async function fetchNearbyStops() {
     const lat = map.getCenter().lat;
@@ -36,6 +42,7 @@ async function fetchNearbyStops() {
         return;
     }
 
+    updateLocationDisplay(lat, lon); // Display user location
     showLoading(); // Show loading text
 
     try {
