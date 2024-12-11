@@ -12,6 +12,10 @@
     <h1>Metro Transit Schedule Explorer</h1>
     <label for="distance">Walking distance (feet):</label>
     <input type="number" id="distance" placeholder="Enter distance in feet" />
+    <br />
+    <label for="frequency">Desired Frequency (minutes):</label>
+    <input type="number" id="frequency" placeholder="Enter frequency in minutes" />
+    <br />
     <div>
         <label for="manual-coordinates">Use Manual Coordinates</label>
         <input type="checkbox" id="manual-coordinates" />
@@ -25,7 +29,7 @@
     <span id="loading-text" style="display: none; margin-left: 10px;">Loading...</span>
     <p id="user-location" style="margin-top: 20px;"></p> <!-- Location display -->
     <div id="map" style="height: 400px; margin-top: 20px;"></div>
-    <div id="routes-container"></div>
+    <!-- <div id="routes-container"></div> -->
     <table id="routes-table" style="margin-top: 20px; width: 100%; border-collapse: collapse;">
         <thead>
             <tr>

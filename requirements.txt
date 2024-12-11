@@ -2,3 +2,5 @@ Flask==2.2.2
 googlemaps
 werkzeug<3
 aiohttp
+python-dotenv
+pandas

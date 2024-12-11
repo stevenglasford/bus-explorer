@@ -285,13 +285,19 @@ def get_nearby_stops(lat, lon, distance_feet):
 @main.route('/api/schedule/nearby', methods=['GET'])
 def schedule_nearby():
     """Find nearby stops and parse GTFS data for routes and branches."""
+    print("got to the nearby_stops")
     try:
         # Get user input
+        print("get user stuff")
         user_lat = float(request.args.get("lat"))
         user_lon = float(request.args.get("lon"))
         distance_feet = float(request.args.get("distance"))
+        frequency_limit = float(request.args.get("frequency"))
 
         # Load GTFS data
+        print("Check for the gtfs")
+        handle_gtfs()
+        print("Got the gtfs")
         gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
         with zipfile.ZipFile(gtfs_path, 'r') as z:
             with z.open('stops.txt') as f:
@@ -300,14 +306,16 @@ def schedule_nearby():
                 stop_times = pd.read_csv(f)
             with z.open('trips.txt') as f:
                 trips = pd.read_csv(f)
-
+        print("1")
         # Step 1: Filter stops by distance
         stops["distance"] = stops.apply(
-            lambda row: calculate_distance(user_lat, user_lon, row["stop_lat"], row["stop_lon"]),
-            axis=1,
+            lambda row: calculate_distance(user_lat, user_lon, row["stop_lat"], row["stop_lon"]),axis=1,
         )
+        print("2")
         nearby_stops = stops[stops["distance"] <= distance_feet]
+        print("3")
         nearby_stop_ids = nearby_stops["stop_id"].astype(str).tolist()
+        print(nearby_stops)
 
         # Debugging: Check nearby stops
         print("Nearby Stops:", nearby_stops)
@@ -323,20 +331,35 @@ def schedule_nearby():
             )
         )
         unique_routes = trips[trips["trip_id"].isin(matching_trip_ids)][
-            ["route_id", "branch_letter", "schedule_type"]
+            ["route_id", "branch_letter", "schedule_type", "trip_id"]
         ]
+        print(unique_routes)
+        # Calculate frequency for each route and branch
+        stop_times["arrival_time_seconds"] = stop_times["arrival_time"].apply(
+            lambda x: sum(int(t) * 60 ** i for i, t in enumerate(reversed(x.split(":"))))
+        )
 
-        # Group by route_id + branch_letter and aggregate schedule types
-        grouped_routes = unique_routes.groupby(["route_id", "branch_letter"])["schedule_type"].unique().reset_index()
+        frequency_data = []
+        for _, group in unique_routes.groupby(["route_id", "branch_letter"]):
+            group_trip_ids = group["trip_id"].unique()
+            relevant_stop_times = stop_times[stop_times["trip_id"].isin(group_trip_ids)]
+            if relevant_stop_times.empty:
+                continue
 
-        # Create rows with columns for each schedule type
-        schedule_types = ["Reduced", "Saturday", "Sunday", "Holiday", "Weekday"]
-        rows = []
-        for _, row in grouped_routes.iterrows():
-            route = f"{row['route_id']}{row['branch_letter']}" if pd.notna(row['branch_letter']) else f"{row['route_id']}"
-            schedule_buttons = {sched: sched in row["schedule_type"] for sched in schedule_types}
-            rows.append({"route": route, **schedule_buttons})
+            first_trip = relevant_stop_times["arrival_time_seconds"].min()
+            last_trip = relevant_stop_times["arrival_time_seconds"].max()
+            total_trips = relevant_stop_times["trip_id"].nunique()
 
-        return jsonify(rows)
+            average_frequency = (last_trip - first_trip) / total_trips if total_trips > 0 else float("inf")
+            meets_frequency = average_frequency <= frequency_limit * 60
+
+            frequency_data.append({
+                "route": f"{group['route_id'].iloc[0]}{group['branch_letter'].iloc[0]}",
+                "schedule_type": group["schedule_type"].iloc[0],
+                "meets_frequency": bool(meets_frequency)
+            })
+
+        print(frequency_data)
+        return jsonify(frequency_data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

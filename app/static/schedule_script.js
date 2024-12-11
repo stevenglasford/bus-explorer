@@ -62,26 +62,30 @@ document.getElementById("manual-coordinates").addEventListener("change", (e) => 
 
 // Fetch nearby stops and update the table
 async function fetchNearbyStops() {
+    const lat = map.getCenter().lat;
+    const lon = map.getCenter().lng;
     const distance = document.getElementById("distance").value;
-    if (!distance) {
-        alert("Please enter a walking distance!");
+    const frequency = document.getElementById("frequency").value;
+    
+    if (!distance || !frequency) {
+        alert("Please enter both walking distance and frequency!");
         return;
     }
 
-    let coordinates;
-    try {
-        coordinates = getCoordinates();
-    } catch (error) {
-        return; // Abort if coordinates are invalid
-    }
+    // let coordinates;
+    // try {
+    //     coordinates = getCoordinates();
+    // } catch (error) {
+    //     return; // Abort if coordinates are invalid
+    // }
 
-    const { lat, lon } = coordinates;
+    // const { lat, lon } = coordinates;
     updateLocationDisplay(lat, lon);
     showLoading();
 
     try {
         const response = await axios.get("/api/schedule/nearby", {
-            params: { lat, lon, distance },
+            params: { lat, lon, distance, frequency },
         });
 
         const rows = response.data;
@@ -96,9 +100,10 @@ async function fetchNearbyStops() {
 
             ["Reduced", "Saturday", "Sunday", "Holiday", "Weekday"].forEach((sched) => {
                 const cell = document.createElement("td");
-                if (row[sched]) {
+                if (row.schedule_type === sched) {
                     const button = document.createElement("button");
                     button.textContent = sched;
+                    button.style.backgroundColor = row.meets_frequency ? "green" : "red";
                     cell.appendChild(button);
                 }
                 tr.appendChild(cell);
