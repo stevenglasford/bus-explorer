@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, jsonify, request
 from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
+import zipfile
+import pandas as pd
 from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency, fetch_osm_bus_stops, fetch_stop_departures, calculate_frequency, fetch_osm_bus_stops, fetch_all_departures, calculate_frequency
 import asyncio
 import requests
@@ -10,7 +12,15 @@ main = Blueprint('main', __name__)
 
 @main.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('landing.html')
+
+@main.route('/realtime')
+def realtime_page():
+    return render_template('index.html')  # Existing real-time page
+
+@main.route('/schedule')
+def schedule_page():
+    return render_template('schedule.html')
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """
@@ -192,3 +202,29 @@ def get_routes_and_stops():
     except Exception as e:
         print(f"Error fetching routes and stops: {e}")
         return jsonify({"error": str(e)}), 500
+
+@main.route('/api/schedule', methods=['GET'])
+def schedule_data():
+    gtfs_path = "/mnt/data/gtfs(1).zip"
+
+    with zipfile.ZipFile(gtfs_path, 'r') as z:
+        # Load relevant GTFS files
+        ##debugging start
+        file_list = z.namelist()
+        print("Files in GTFS zip:", file_list)
+        ##debugging end
+        with z.open('stops.txt') as f:
+            stops = pd.read_csv(f)
+            ##debuging start
+            print("Stops sample:", stops.head())
+            ## debuging end
+        with z.open('stop_times.txt') as f:
+            stop_times = pd.read_csv(f)
+
+    # Merge stops with stop_times
+    schedule = stop_times.merge(stops, on='stop_id')
+
+    # Simplify schedule data
+    schedule_data = schedule[['trip_id', 'arrival_time', 'departure_time', 'stop_name']].head(10)
+
+    return jsonify(schedule_data.to_dict(orient='records'))
