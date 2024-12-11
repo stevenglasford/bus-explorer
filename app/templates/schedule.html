@@ -12,6 +12,15 @@
     <h1>Metro Transit Schedule Explorer</h1>
     <label for="distance">Walking distance (feet):</label>
     <input type="number" id="distance" placeholder="Enter distance in feet" />
+    <div>
+        <label for="manual-coordinates">Use Manual Coordinates</label>
+        <input type="checkbox" id="manual-coordinates" />
+        <br />
+        <label for="latitude">Latitude:</label>
+        <input type="text" id="latitude" placeholder="Enter latitude" disabled />
+        <label for="longitude">Longitude:</label>
+        <input type="text" id="longitude" placeholder="Enter longitude" disabled />
+    </div>
     <button id="get-stops-btn">Find Stops</button>
     <span id="loading-text" style="display: none; margin-left: 10px;">Loading...</span>
     <p id="user-location" style="margin-top: 20px;"></p> <!-- Location display -->

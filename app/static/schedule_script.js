@@ -28,17 +28,54 @@ function updateLocationDisplay(lat, lon) {
     locationElement.textContent = `Your Location: Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
 }
 
+// Validate and parse manual coordinates
+function getCoordinates() {
+    const useManual = document.getElementById("manual-coordinates").checked;
+    if (useManual) {
+        const latInput = document.getElementById("latitude").value.trim();
+        const lonInput = document.getElementById("longitude").value.trim();
+        const lat = parseFloat(latInput);
+        const lon = parseFloat(lonInput);
+
+        if (
+            isNaN(lat) || isNaN(lon) ||
+            lat < -90 || lat > 90 || lon < -180 || lon > 180
+        ) {
+            alert("Parse error on the coordinates. Please enter valid decimal coordinates.");
+            throw new Error("Parse error on the coordinates");
+        }
+        return { lat, lon };
+    } else {
+        return {
+            lat: map.getCenter().lat,
+            lon: map.getCenter().lng,
+        };
+    }
+}
+
+// Enable or disable manual coordinate input
+document.getElementById("manual-coordinates").addEventListener("change", (e) => {
+    const isChecked = e.target.checked;
+    document.getElementById("latitude").disabled = !isChecked;
+    document.getElementById("longitude").disabled = !isChecked;
+});
+
 // Fetch nearby stops and update the table
 async function fetchNearbyStops() {
-    const lat = map.getCenter().lat;
-    const lon = map.getCenter().lng;
     const distance = document.getElementById("distance").value;
-
     if (!distance) {
         alert("Please enter a walking distance!");
         return;
     }
 
+    let coordinates;
+    try {
+        coordinates = getCoordinates();
+    } catch (error) {
+        return; // Abort if coordinates are invalid
+    }
+
+    const { lat, lon } = coordinates;
     updateLocationDisplay(lat, lon);
     showLoading();
 
