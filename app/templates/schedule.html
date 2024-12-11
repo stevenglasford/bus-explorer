@@ -17,6 +17,19 @@
     <p id="user-location" style="margin-top: 20px;"></p> <!-- Location display -->
     <div id="map" style="height: 400px; margin-top: 20px;"></div>
     <div id="routes-container"></div>
+    <table id="routes-table" style="margin-top: 20px; width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th>Route</th>
+                <th>Reduced</th>
+                <th>Saturday</th>
+                <th>Sunday</th>
+                <th>Holiday</th>
+                <th>Weekday</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
     <script src="{{ url_for('static', filename='schedule_script.js') }}"></script>
 </body>
 </html>

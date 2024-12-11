@@ -315,21 +315,28 @@ def schedule_nearby():
         # Step 2: Filter stop_times by nearby stop IDs
         matching_trip_ids = stop_times[stop_times["stop_id"].astype(str).isin(nearby_stop_ids)]["trip_id"].unique()
 
-        # Debugging: Check matching trip IDs
-        print("Matching Trip IDs:", matching_trip_ids)
-
-        # Step 3: Find unique route and branch combinations
-        unique_routes = trips[trips["trip_id"].isin(matching_trip_ids)][["route_id", "branch_letter"]].drop_duplicates()
-
-        # Debugging: Check unique routes
-        print("Unique Routes:", unique_routes)
-
-        # Step 4: Format buttons as "route_id + branch_letter" (exclude NaN)
-        buttons = [
-            f"{row['route_id']}{row['branch_letter']}" if pd.notna(row['branch_letter']) else f"{row['route_id']}"
-            for _, row in unique_routes.iterrows()
+        # Step 3: Find unique route and branch combinations with schedule types
+        trips["schedule_type"] = trips["trip_id"].apply(
+            lambda x: next(
+                (sched for sched in ["Reduced", "Saturday", "Sunday", "Holiday", "Weekday"] if sched in x),
+                None,
+            )
+        )
+        unique_routes = trips[trips["trip_id"].isin(matching_trip_ids)][
+            ["route_id", "branch_letter", "schedule_type"]
         ]
 
-        return jsonify(sorted(buttons))
+        # Group by route_id + branch_letter and aggregate schedule types
+        grouped_routes = unique_routes.groupby(["route_id", "branch_letter"])["schedule_type"].unique().reset_index()
+
+        # Create rows with columns for each schedule type
+        schedule_types = ["Reduced", "Saturday", "Sunday", "Holiday", "Weekday"]
+        rows = []
+        for _, row in grouped_routes.iterrows():
+            route = f"{row['route_id']}{row['branch_letter']}" if pd.notna(row['branch_letter']) else f"{row['route_id']}"
+            schedule_buttons = {sched: sched in row["schedule_type"] for sched in schedule_types}
+            rows.append({"route": route, **schedule_buttons})
+
+        return jsonify(rows)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
