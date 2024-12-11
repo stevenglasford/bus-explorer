@@ -281,3 +281,57 @@ def schedule_data():
     schedule_data = schedule[['trip_id', 'arrival_time', 'departure_time', 'stop_name']].head(10)
 
     return jsonify(schedule_data.to_dict(orient='records'))
+
+def get_nearby_stops(lat, lon, distance_feet):
+    """Query OpenStreetMap for nearby bus stops."""
+    # Convert distance from feet to meters (1 foot = 0.3048 meters)
+    radius_meters = distance_feet * 0.3048
+    query = f"""
+    [out:json];
+    node["highway"="bus_stop"](around:{radius_meters},{lat},{lon});
+    out body;
+    """
+    response = requests.post("https://overpass-api.de/api/interpreter", data={"data": query})
+    response.raise_for_status()
+    return response.json()["elements"]
+
+@main.route('/api/schedule/nearby', methods=['GET'])
+def schedule_nearby():
+    """Find nearby stops and parse GTFS data for routes and branches."""
+    try:
+        # Get user input
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+        distance_feet = int(request.args.get("distance"))
+
+        # Step 1: Query OSM for nearby stops
+        osm_stops = get_nearby_stops(lat, lon, distance_feet)
+        osm_stop_ids = [
+            stop.get("tags", {}).get("metro_council:site_id")
+            for stop in osm_stops
+            if stop.get("tags", {}).get("metro_council:site_id")
+        ]
+
+        # Step 2: Load GTFS data
+        gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
+        with zipfile.ZipFile(gtfs_path, 'r') as z:
+            with z.open('stop_times.txt') as f:
+                stop_times = pd.read_csv(f)
+            with z.open('trips.txt') as f:
+                trips = pd.read_csv(f)
+
+        # Step 3: Filter stop_times by stop_id
+        filtered_stop_times = stop_times[stop_times["stop_id"].isin(osm_stop_ids)]
+
+        # Step 4: Join with trips to get route_id and branch_letter
+        routes = filtered_stop_times.merge(trips, on="trip_id")[["route_id", "branch_letter"]]
+        unique_routes = routes.drop_duplicates()
+
+        # Step 5: Create unique buttons
+        buttons = [
+            f"{row['route_id']}{row['branch_letter']}" for _, row in unique_routes.iterrows()
+        ]
+
+        return jsonify(sorted(buttons))
+    except Exception as e:
+        return jsonify({"error at /api/schedule/nearby": str(e)}), 500

@@ -3,28 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Metro Transit Bus Schedule</title>
+    <title>Metro Transit Schedule Explorer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 </head>
 <body>
-    <h1>Metro Transit Bus Schedule</h1>
-    <p>Select a route to view its schedule:</p>
-    <div id="schedule-container"></div>
-    <script>
-        // Fetch schedule data
-        async function fetchSchedule() {
-            const response = await fetch('/api/schedule');
-            const data = await response.json();
-            const container = document.getElementById('schedule-container');
-            container.innerHTML = '';
+    <h1>Metro Transit Schedule Explorer</h1>
+    <label for="distance">Walking distance (feet):</label>
+    <input type="number" id="distance" placeholder="Enter distance in feet" />
+    <button id="get-stops-btn">Find Stops</button>
+    <div id="map" style="height: 400px;"></div>
+    <div id="routes-container"></div>
 
-            data.forEach(schedule => {
-                const div = document.createElement('div');
-                div.textContent = `Route ${schedule.route_id}: ${schedule.departure_time}`;
-                container.appendChild(div);
-            });
+    <script>
+        // Initialize map
+        const map = L.map("map").setView([44.9778, -93.2650], 13); // Default location: Minneapolis
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+        }).addTo(map);
+
+        // Fetch nearby stops
+        async function fetchNearbyStops() {
+            const lat = map.getCenter().lat;
+            const lon = map.getCenter().lng;
+            const distance = document.getElementById("distance").value;
+
+            if (!distance) {
+                alert("Please enter a walking distance!");
+                return;
+            }
+
+            try {
+                const response = await axios.get("/api/schedule/nearby", {
+                    params: { lat, lon, distance },
+                });
+
+                const buttons = response.data;
+                const container = document.getElementById("routes-container");
+                container.innerHTML = "";
+
+                buttons.forEach((route) => {
+                    const button = document.createElement("button");
+                    button.textContent = route;
+                    button.style.margin = "5px";
+                    container.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error fetching nearby stops:", error);
+            }
         }
 
-        fetchSchedule();
+        document.getElementById("get-stops-btn").addEventListener("click", fetchNearbyStops);
     </script>
 </body>
 </html>
