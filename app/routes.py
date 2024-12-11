@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, make_response, send_file
 from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
 import zipfile
@@ -6,6 +6,13 @@ import pandas as pd
 from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency, fetch_osm_bus_stops, fetch_stop_departures, calculate_frequency, fetch_osm_bus_stops, fetch_all_departures, calculate_frequency
 import asyncio
 import requests
+import os
+
+##Constants
+GTFS_URL = "https://svc.metrotransit.org/mtgtfs/gtfs.zip"
+CACHE_DIR = "/tmp"
+GTFS_FILENAME = "gtfs.zip"
+COOKIE_NAME = "gtfs_last_updated"
 
 # Define a Blueprint
 main = Blueprint('main', __name__)
@@ -202,10 +209,56 @@ def get_routes_and_stops():
     except Exception as e:
         print(f"Error fetching routes and stops: {e}")
         return jsonify({"error": str(e)}), 500
+    
+def download_gtfs_file():
+    """Download the GTFS file from the URL and save it to the cache directory."""
+    response = requests.get(GTFS_URL, stream=True)
+    response.raise_for_status()
+    gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
+    with open(gtfs_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    return gtfs_path
+
+@main.route('/api/gtfs')
+def handle_gtfs():
+    """Check if the GTFS file needs to be updated or served."""
+    gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
+    last_modified_cookie = request.cookies.get(COOKIE_NAME)
+
+    headers = {}
+    if last_modified_cookie:
+        # Add "If-Modified-Since" header if we have a cookie
+        headers["If-Modified-Since"] = last_modified_cookie
+
+    # Make a HEAD request to check "Last-Modified"
+    response = requests.head(GTFS_URL, headers=headers)
+    if response.status_code == 304:
+        # File has not been modified; serve the cached file
+        if os.path.exists(gtfs_path):
+            return send_file(gtfs_path)
+
+    if response.status_code == 200:
+        # File has been modified; download the updated file
+        gtfs_path = download_gtfs_file()
+        last_modified = response.headers.get("Last-Modified", datetime.now().strftime("%Y-%m-%d"))
+
+        # Set a cookie with the new "Last-Modified" date
+        response = make_response(send_file(gtfs_path))
+        response.set_cookie(COOKIE_NAME, last_modified, max_age=7 * 24 * 60 * 60)
+        return response
+
+    # Handle errors gracefully
+    return jsonify({"error": "Failed to fetch GTFS data"}), response.status_code
+
 
 @main.route('/api/schedule', methods=['GET'])
 def schedule_data():
-    gtfs_path = "/mnt/data/gtfs(1).zip"
+    # Fetch the GTFS file path from the /api/gtfs route
+    gtfs_path = "/tmp/gtfs.zip"  # Cached file path
+
+    if not os.path.exists(gtfs_path):
+        download_gtfs_file()
 
     with zipfile.ZipFile(gtfs_path, 'r') as z:
         # Load relevant GTFS files
