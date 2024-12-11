@@ -324,9 +324,10 @@ def schedule_nearby():
         # Debugging: Check unique routes
         print("Unique Routes:", unique_routes)
 
-        # Step 4: Format buttons as "route_id + branch_letter"
+        # Step 4: Format buttons as "route_id + branch_letter" (exclude NaN)
         buttons = [
-            f"{row['route_id']}{row['branch_letter']}" for _, row in unique_routes.iterrows()
+            f"{row['route_id']}{row['branch_letter']}" if pd.notna(row['branch_letter']) else f"{row['route_id']}"
+            for _, row in unique_routes.iterrows()
         ]
 
         return jsonify(sorted(buttons))
