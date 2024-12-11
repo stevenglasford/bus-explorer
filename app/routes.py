@@ -305,6 +305,7 @@ def schedule_nearby():
         distance_feet = int(request.args.get("distance"))
 
         # Step 1: Query OSM for nearby stops
+        print("querying osm") #debugging
         osm_stops = get_nearby_stops(lat, lon, distance_feet)
         osm_stop_ids = [
             stop.get("tags", {}).get("metro_council:site_id")
@@ -313,6 +314,7 @@ def schedule_nearby():
         ]
 
         # Step 2: Load GTFS data
+        print("loading gtfs data") #debugging
         gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
         with zipfile.ZipFile(gtfs_path, 'r') as z:
             with z.open('stop_times.txt') as f:
@@ -321,17 +323,23 @@ def schedule_nearby():
                 trips = pd.read_csv(f)
 
         # Step 3: Filter stop_times by stop_id
+        print("filtering stops") #debugging
         filtered_stop_times = stop_times[stop_times["stop_id"].isin(osm_stop_ids)]
 
         # Step 4: Join with trips to get route_id and branch_letter
-        routes = filtered_stop_times.merge(trips, on="trip_id")[["route_id", "branch_letter"]]
+        print("filtering stop times") #debugging
+        routes = filtered_stop_times.merge(trips, on="trip_id")[["route_id", "branch_letter"]] 
+        
+        print("finding unique routes") #debugging  
         unique_routes = routes.drop_duplicates()
 
         # Step 5: Create unique buttons
+        print("creating buttons") #debugging
         buttons = [
             f"{row['route_id']}{row['branch_letter']}" for _, row in unique_routes.iterrows()
         ]
-
+        
+        print("returning buttons") #debugging
         return jsonify(sorted(buttons))
     except Exception as e:
         return jsonify({"error at /api/schedule/nearby": str(e)}), 500
