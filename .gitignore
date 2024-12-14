@@ -6,3 +6,8 @@ venv/
 .env
 app/static/metro_test_data
 .venv/
+nearby_stops_dump.csv
+stop_times_dump.csv
+stops_dump.csv
+trips_dump.csv
+unique_routes_dump.csv
