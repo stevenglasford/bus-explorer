@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request, make_response, send_file
+from flask import Blueprint, json, render_template, jsonify, request, make_response, send_file
 from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
 import zipfile
@@ -7,6 +7,8 @@ from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_n
 import asyncio
 import requests
 import os
+import multiprocessing as mp
+import numpy as np
 
 ##Constants
 GTFS_URL = "https://svc.metrotransit.org/mtgtfs/gtfs.zip"
@@ -282,6 +284,10 @@ def get_nearby_stops(lat, lon, distance_feet):
     response.raise_for_status()
     return response.json()["elements"]
 
+def filter_stop_times_by_stop_id(stop_id, stop_times):
+    """Filter stop_times for a specific stop_id."""
+    return stop_times[stop_times["stop_id"] == stop_id]["trip_id"].unique()
+
 @main.route('/api/schedule/nearby', methods=['GET'])
 def schedule_nearby():
     """Find nearby stops and parse GTFS data for routes and branches."""
@@ -306,24 +312,29 @@ def schedule_nearby():
                 stop_times = pd.read_csv(f)
             with z.open('trips.txt') as f:
                 trips = pd.read_csv(f)
-        print("1")
-        # Step 1: Filter stops by distance
-        stops["distance"] = stops.apply(
-            lambda row: calculate_distance(user_lat, user_lon, row["stop_lat"], row["stop_lon"]),axis=1,
-        )
-        print("2")
-        nearby_stops = stops[stops["distance"] <= distance_feet]
-        print("3")
-        nearby_stop_ids = nearby_stops["stop_id"].astype(str).tolist()
-        print(nearby_stops)
 
-        # Debugging: Check nearby stops
-        print("Nearby Stops:", nearby_stops)
+        print("Raw data loaded.")
+
+        # Step 1: Filter stops by distance using vectorized operations
+        print("Filtering stops by distance...")
+        stops_coords = np.radians(stops[["stop_lat", "stop_lon"]].values)
+        user_coords = np.radians([user_lat, user_lon])
+        dlat = stops_coords[:, 0] - user_coords[0]
+        dlon = stops_coords[:, 1] - user_coords[1]
+        a = np.sin(dlat / 2) ** 2 + np.cos(stops_coords[:, 0]) * np.cos(user_coords[0]) * np.sin(dlon / 2) ** 2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+        stops["distance"] = 6371000 * c * 3.28084  # Earth radius in meters, converted to feet
+        nearby_stops = stops[stops["distance"] <= distance_feet]
+        nearby_stop_ids = pd.to_numeric(nearby_stops["stop_id"]).tolist()  # Convert to numeric
+        print("Nearby stops filtered:", len(nearby_stops))
 
         # Step 2: Filter stop_times by nearby stop IDs
-        matching_trip_ids = stop_times[stop_times["stop_id"].astype(str).isin(nearby_stop_ids)]["trip_id"].unique()
+        print("Filtering stop_times...")
+        matching_trip_ids = stop_times[stop_times["stop_id"].isin(nearby_stop_ids)]["trip_id"].unique()
+        print("Matching trip IDs:", len(matching_trip_ids))
 
         # Step 3: Find unique route and branch combinations with schedule types
+        print("Processing trips...")
         trips["schedule_type"] = trips["trip_id"].apply(
             lambda x: next(
                 (sched for sched in ["Reduced", "Saturday", "Sunday", "Holiday", "Weekday"] if sched in x),
@@ -333,33 +344,115 @@ def schedule_nearby():
         unique_routes = trips[trips["trip_id"].isin(matching_trip_ids)][
             ["route_id", "branch_letter", "schedule_type", "trip_id"]
         ]
-        print(unique_routes)
-        # Calculate frequency for each route and branch
+        print("Unique routes processed.")
+        print(unique_routes.groupby("schedule_type").size())
+
+
+        # Step 4: Calculate frequencies
+        print("Calculating frequencies...")
         stop_times["arrival_time_seconds"] = stop_times["arrival_time"].apply(
             lambda x: sum(int(t) * 60 ** i for i, t in enumerate(reversed(x.split(":"))))
         )
 
         frequency_data = []
-        for _, group in unique_routes.groupby(["route_id", "branch_letter"]):
+
+        # Group by route_id and branch_letter
+        for (route_id, branch_letter), group in unique_routes.groupby(["route_id", "branch_letter"]):
+            print(f"Processing Group: Route {route_id}, Branch {branch_letter}")
             group_trip_ids = group["trip_id"].unique()
+            print("Group Trip IDs:", group_trip_ids)
+
+            # Filter relevant stop_times
             relevant_stop_times = stop_times[stop_times["trip_id"].isin(group_trip_ids)]
+            print("Relevant Stop Times:", relevant_stop_times)
+
             if relevant_stop_times.empty:
+                print("No relevant stop times. Skipping...")
+                frequency_data.append({
+                    "route": f"{route_id}{branch_letter}",
+                    "schedule_type": group["schedule_type"].iloc[0],
+                    "meets_frequency": False  # Default to False if no data
+                })
                 continue
 
+            # Calculate frequency
             first_trip = relevant_stop_times["arrival_time_seconds"].min()
             last_trip = relevant_stop_times["arrival_time_seconds"].max()
             total_trips = relevant_stop_times["trip_id"].nunique()
 
-            average_frequency = (last_trip - first_trip) / total_trips if total_trips > 0 else float("inf")
+            if total_trips > 1:
+                average_frequency = (last_trip - first_trip) / (total_trips - 1)
+            else:
+                average_frequency = float("inf")
+
             meets_frequency = average_frequency <= frequency_limit * 60
 
+            # Debugging group and frequency calculation
+            # print(f"First Trip: {first_trip}, Last Trip: {last_trip}, Total Trips: {total_trips}")
+            # print(f"Average Frequency: {average_frequency}, Meets Frequency: {meets_frequency}")
+
+            # Append to frequency_data
             frequency_data.append({
-                "route": f"{group['route_id'].iloc[0]}{group['branch_letter'].iloc[0]}",
+                "route": f"{route_id}{branch_letter}",
                 "schedule_type": group["schedule_type"].iloc[0],
                 "meets_frequency": bool(meets_frequency)
             })
 
+
+        print("Frequencies calculated.")
+        with open("frequency_dump.txt", "w") as json_file:
+            json.dump(frequency_data, json_file, indent=4)
+
         print(frequency_data)
         return jsonify(frequency_data)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main.route('/api/route_shape', methods=['GET'])
+def route_shape():
+    """Return the shape of the selected route."""
+    try:
+        route_id = request.args.get("route_id")
+        branch_letter = request.args.get("branch_letter")
+        
+        # Load GTFS data
+        gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
+        with zipfile.ZipFile(gtfs_path, 'r') as z:
+            with z.open('shapes.txt') as f:
+                shapes = pd.read_csv(f)
+            with z.open('trips.txt') as f:
+                trips = pd.read_csv(f)
+
+        # Filter trips for the selected route and branch
+        selected_trips = trips[
+            (trips["route_id"] == route_id) & 
+            (trips["branch_letter"] == branch_letter)
+        ]
+        shape_ids = selected_trips["shape_id"].unique()
+
+        # Filter shapes for the selected trips
+        route_shapes = shapes[shapes["shape_id"].isin(shape_ids)]
+        route_shapes = route_shapes.sort_values(by=["shape_id", "shape_pt_sequence"])
+
+        # Prepare GeoJSON data
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": []
+        }
+        for shape_id, shape_group in route_shapes.groupby("shape_id"):
+            coordinates = shape_group[["shape_pt_lon", "shape_pt_lat"]].values.tolist()
+            geojson_data["features"].append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates
+                },
+                "properties": {"shape_id": shape_id}
+            })
+
+        return jsonify(geojson_data)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500

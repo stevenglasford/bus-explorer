@@ -1,8 +1,8 @@
 // Initialize map
 const map = L.map("map").setView([44.9778, -93.2650], 13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 let loadingInterval;
+let routeLayer; // Store the current route layer
 
 // Show loading text with animation
 function showLoading() {
@@ -119,3 +119,37 @@ async function fetchNearbyStops() {
 }
 
 document.getElementById("get-stops-btn").addEventListener("click", fetchNearbyStops);
+
+// Handle button clicks
+document.querySelectorAll('.route-btn').forEach(button => {
+    button.addEventListener('click', async () => {
+        const routeId = button.dataset.routeId;
+        const branchLetter = button.dataset.branchLetter;
+
+        // Fetch route shape from the server
+        try {
+            const response = await axios.get('/api/route_shape', {
+                params: { route_id: routeId, branch_letter: branchLetter }
+            });
+            const geojsonData = response.data;
+
+            // Remove the existing route layer if present
+            if (routeLayer) {
+                map.removeLayer(routeLayer);
+            }
+
+            // Add the new route layer
+            routeLayer = L.geoJSON(geojsonData, {
+                style: { color: 'blue', weight: 4 }
+            }).addTo(map);
+
+            // Adjust the map view to fit the route
+            const bounds = routeLayer.getBounds();
+            map.fitBounds(bounds);
+
+        } catch (error) {
+            console.error("Error fetching route shape:", error);
+            alert("Could not load the route shape. Please try again.");
+        }
+    });
+});
