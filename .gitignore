@@ -11,3 +11,4 @@ stop_times_dump.csv
 stops_dump.csv
 trips_dump.csv
 unique_routes_dump.csv
+frequency_dump.txt
