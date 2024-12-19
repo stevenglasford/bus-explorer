@@ -12,3 +12,4 @@ stops_dump.csv
 trips_dump.csv
 unique_routes_dump.csv
 frequency_dump.txt
+frequency_data.json
