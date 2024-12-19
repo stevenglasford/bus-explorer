@@ -1,0 +1,298 @@
+[
+    {
+        "first_departure": "04:10:00",
+        "last_departure": "26:00:00",
+        "meets_frequency": true,
+        "route": "3A",
+        "schedule_type": "Holiday",
+        "total_trips": 892
+    },
+    {
+        "first_departure": "05:10:00",
+        "last_departure": "25:00:00",
+        "meets_frequency": true,
+        "route": "3B",
+        "schedule_type": "Holiday",
+        "total_trips": 842
+    },
+    {
+        "first_departure": "22:37:00",
+        "last_departure": "23:40:00",
+        "meets_frequency": true,
+        "route": "3E",
+        "schedule_type": "Holiday",
+        "total_trips": 4
+    },
+    {
+        "first_departure": "18:57:00",
+        "last_departure": "23:49:00",
+        "meets_frequency": true,
+        "route": "3S",
+        "schedule_type": "Reduced",
+        "total_trips": 16
+    },
+    {
+        "first_departure": "07:30:00",
+        "last_departure": "07:31:00",
+        "meets_frequency": true,
+        "route": "11D",
+        "schedule_type": "Weekday",
+        "total_trips": 6
+    },
+    {
+        "first_departure": "05:05:00",
+        "last_departure": "25:11:00",
+        "meets_frequency": false,
+        "route": "14B",
+        "schedule_type": "Holiday",
+        "total_trips": 34
+    },
+    {
+        "first_departure": "05:05:00",
+        "last_departure": "23:36:00",
+        "meets_frequency": true,
+        "route": "14C",
+        "schedule_type": "Holiday",
+        "total_trips": 329
+    },
+    {
+        "first_departure": "05:51:00",
+        "last_departure": "17:05:00",
+        "meets_frequency": true,
+        "route": "14E",
+        "schedule_type": "Holiday",
+        "total_trips": 99
+    },
+    {
+        "first_departure": "04:49:00",
+        "last_departure": "24:57:00",
+        "meets_frequency": true,
+        "route": "17D",
+        "schedule_type": "Holiday",
+        "total_trips": 609
+    },
+    {
+        "first_departure": "05:12:00",
+        "last_departure": "06:12:00",
+        "meets_frequency": true,
+        "route": "17F",
+        "schedule_type": "Weekday",
+        "total_trips": 15
+    },
+    {
+        "first_departure": "05:30:00",
+        "last_departure": "23:48:00",
+        "meets_frequency": true,
+        "route": "18A",
+        "schedule_type": "Holiday",
+        "total_trips": 50
+    },
+    {
+        "first_departure": "05:41:00",
+        "last_departure": "24:36:00",
+        "meets_frequency": true,
+        "route": "18C",
+        "schedule_type": "Holiday",
+        "total_trips": 320
+    },
+    {
+        "first_departure": "04:06:00",
+        "last_departure": "24:37:00",
+        "meets_frequency": true,
+        "route": "18D",
+        "schedule_type": "Holiday",
+        "total_trips": 524
+    },
+    {
+        "first_departure": "04:07:00",
+        "last_departure": "22:44:00",
+        "meets_frequency": true,
+        "route": "18E",
+        "schedule_type": "Holiday",
+        "total_trips": 594
+    },
+    {
+        "first_departure": "07:08:00",
+        "last_departure": "17:05:00",
+        "meets_frequency": true,
+        "route": "22A",
+        "schedule_type": "Weekday",
+        "total_trips": 165
+    },
+    {
+        "first_departure": "05:51:00",
+        "last_departure": "24:59:00",
+        "meets_frequency": true,
+        "route": "22B",
+        "schedule_type": "Holiday",
+        "total_trips": 531
+    },
+    {
+        "first_departure": "04:55:00",
+        "last_departure": "23:59:00",
+        "meets_frequency": true,
+        "route": "22C",
+        "schedule_type": "Holiday",
+        "total_trips": 551
+    },
+    {
+        "first_departure": "05:05:00",
+        "last_departure": "25:14:00",
+        "meets_frequency": true,
+        "route": "22H",
+        "schedule_type": "Holiday",
+        "total_trips": 1254
+    },
+    {
+        "first_departure": "05:07:00",
+        "last_departure": "19:17:00",
+        "meets_frequency": true,
+        "route": "94D",
+        "schedule_type": "Reduced",
+        "total_trips": 246
+    },
+    {
+        "first_departure": "13:18:00",
+        "last_departure": "17:41:00",
+        "meets_frequency": true,
+        "route": "250C",
+        "schedule_type": "Reduced",
+        "total_trips": 78
+    },
+    {
+        "first_departure": "06:53:00",
+        "last_departure": "06:55:00",
+        "meets_frequency": true,
+        "route": "250M",
+        "schedule_type": "Reduced",
+        "total_trips": 12
+    },
+    {
+        "first_departure": "15:24:00",
+        "last_departure": "17:12:00",
+        "meets_frequency": true,
+        "route": "250N",
+        "schedule_type": "Weekday",
+        "total_trips": 40
+    },
+    {
+        "first_departure": "16:14:00",
+        "last_departure": "17:22:00",
+        "meets_frequency": true,
+        "route": "264C",
+        "schedule_type": "Weekday",
+        "total_trips": 30
+    },
+    {
+        "first_departure": "15:22:00",
+        "last_departure": "16:54:00",
+        "meets_frequency": true,
+        "route": "270B",
+        "schedule_type": "Reduced",
+        "total_trips": 46
+    },
+    {
+        "first_departure": "15:37:00",
+        "last_departure": "17:24:00",
+        "meets_frequency": true,
+        "route": "270M",
+        "schedule_type": "Weekday",
+        "total_trips": 20
+    },
+    {
+        "first_departure": "08:37:00",
+        "last_departure": "08:39:00",
+        "meets_frequency": true,
+        "route": "698C",
+        "schedule_type": "Weekday",
+        "total_trips": 2
+    },
+    {
+        "first_departure": "06:52:00",
+        "last_departure": "15:29:00",
+        "meets_frequency": false,
+        "route": "698T",
+        "schedule_type": "Weekday",
+        "total_trips": 4
+    },
+    {
+        "first_departure": "09:37:00",
+        "last_departure": "18:29:00",
+        "meets_frequency": true,
+        "route": "698U",
+        "schedule_type": "Weekday",
+        "total_trips": 25
+    },
+    {
+        "first_departure": "15:03:00",
+        "last_departure": "15:06:00",
+        "meets_frequency": true,
+        "route": "755A",
+        "schedule_type": "Weekday",
+        "total_trips": 20
+    },
+    {
+        "first_departure": "16:03:00",
+        "last_departure": "17:10:00",
+        "meets_frequency": true,
+        "route": "755B",
+        "schedule_type": "Weekday",
+        "total_trips": 40
+    },
+    {
+        "first_departure": "05:06:00",
+        "last_departure": "07:08:00",
+        "meets_frequency": true,
+        "route": "755C",
+        "schedule_type": "Weekday",
+        "total_trips": 60
+    },
+    {
+        "first_departure": "16:44:00",
+        "last_departure": "17:43:00",
+        "meets_frequency": true,
+        "route": "766F",
+        "schedule_type": "Weekday",
+        "total_trips": 10
+    },
+    {
+        "first_departure": "15:44:00",
+        "last_departure": "15:44:00",
+        "meets_frequency": true,
+        "route": "766G",
+        "schedule_type": "Weekday",
+        "total_trips": 5
+    },
+    {
+        "first_departure": "12:20:00",
+        "last_departure": "18:40:00",
+        "meets_frequency": false,
+        "route": "781P",
+        "schedule_type": "Weekday",
+        "total_trips": 10
+    },
+    {
+        "first_departure": "15:14:00",
+        "last_departure": "17:35:00",
+        "meets_frequency": true,
+        "route": "850A",
+        "schedule_type": "Reduced",
+        "total_trips": 23
+    },
+    {
+        "first_departure": "14:53:00",
+        "last_departure": "17:12:00",
+        "meets_frequency": true,
+        "route": "850F",
+        "schedule_type": "Reduced",
+        "total_trips": 26
+    },
+    {
+        "first_departure": "16:57:00",
+        "last_departure": "16:57:00",
+        "meets_frequency": true,
+        "route": "850N",
+        "schedule_type": "Weekday",
+        "total_trips": 5
+    }
+]
