@@ -1,10 +1,12 @@
 let userLat, userLng;
 let map, userMarker;
 
+// Update the displayed value of sliders
 function updateValue(slider, spanId) {
     document.getElementById(spanId).textContent = slider.value;
 }
 
+// Initialize the map and user's marker
 function initMap(lat, lng) {
     if (!map) {
         // Initialize the map
@@ -24,6 +26,7 @@ function initMap(lat, lng) {
     }
 }
 
+// Get user's location from the browser
 async function getUserLocation() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -42,8 +45,9 @@ async function getUserLocation() {
     }
 }
 
+// Fetch nearby routes and stops from the API
 async function fetchRoutesAndStops() {
-    console.log("button clicked!");
+    console.log("Fetching routes and stops...");
     const distance = document.getElementById("distance").value;
     const frequency = document.getElementById("frequency").value;
 
@@ -67,25 +71,59 @@ async function fetchRoutesAndStops() {
 
         // Update the routes list
         const routesList = document.getElementById("routes-list");
-        routesList.innerHTML = "";
+        routesList.innerHTML = ""; // Clear previous data
 
         data.forEach((route) => {
-            const button = document.createElement("button");
-            button.textContent = `Route ${route.route_id} - ${route.description}`;
-            button.style.backgroundColor = route.color;
-            routesList.appendChild(button);
+            const row = document.createElement("div");
+            row.classList.add("route-row");
+
+            const routeInfo = document.createElement("div");
+            routeInfo.textContent = `Route ${route[0]} - ${route[1] || "Main"}`;
+            routeInfo.style.fontWeight = "bold";
+            row.appendChild(routeInfo);
+
+            ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((scheduleType, index) => {
+                const value = route[index + 2];
+
+                if (value === 0) {
+                    // No trips for this schedule type
+                    const span = document.createElement("span");
+                    span.textContent = "N/A";
+                    span.style.marginRight = "10px";
+                    span.style.color = "#BDC3C7"; // Gray color for "N/A"
+                    row.appendChild(span);
+                } else {
+                    // Create a button for valid schedule types
+                    const button = document.createElement("button");
+                    button.textContent = scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1);
+
+                    // Set button color based on frequency flag
+                    if (value === 1) {
+                        button.style.backgroundColor = "red"; // Frequency does not meet user desires
+                        button.style.color = "white";
+                    } else if (value === 2) {
+                        button.style.backgroundColor = "green"; // Frequency meets user desires
+                        button.style.color = "white";
+                    }
+
+                    button.classList.add("schedule-button");
+                    row.appendChild(button);
+                }
+            });
+
+            routesList.appendChild(row);
         });
     } catch (error) {
         console.error("Error fetching routes and stops:", error);
         alert("There was an error fetching the data. Please try again.");
-            
+
         // Hide loading spinner
         loadingContainer.style.display = "none";
     }
 }
 
-
+// Attach event listeners
+document.getElementById("get-routes-btn").addEventListener("click", fetchRoutesAndStops);
 
 // Get user location on page load
-document.getElementById("get-routes-btn").addEventListener("click", fetchRoutesAndStops);
 window.onload = getUserLocation;

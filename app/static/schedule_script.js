@@ -62,65 +62,79 @@ document.getElementById("manual-coordinates").addEventListener("change", (e) => 
 
 // Fetch nearby stops and update the table
 async function fetchNearbyStops() {
-    const lat = map.getCenter().lat;
-    const lon = map.getCenter().lng;
     const distance = document.getElementById("distance").value;
     const frequency = document.getElementById("frequency").value;
-    
+
     if (!distance || !frequency) {
         alert("Please enter both walking distance and frequency!");
         return;
     }
 
-    // let coordinates;
-    // try {
-    //     coordinates = getCoordinates();
-    // } catch (error) {
-    //     return; // Abort if coordinates are invalid
-    // }
-
-    // const { lat, lon } = coordinates;
-    updateLocationDisplay(lat, lon);
+    updateLocationDisplay(map.getCenter().lat, map.getCenter().lng);
     showLoading();
 
     try {
         const response = await axios.get("/api/schedule/nearby", {
-            params: { lat, lon, distance, frequency },
+            params: { lat: map.getCenter().lat, lon: map.getCenter().lng, distance, frequency },
         });
 
         const rows = response.data;
-        const tbody = document.querySelector("#routes-table tbody");
-        tbody.innerHTML = ""; // Clear previous rows
+        const tableBody = document.querySelector("#routes-table tbody");
+        tableBody.innerHTML = ""; // Clear previous rows
 
         rows.forEach((row) => {
             const tr = document.createElement("tr");
+
+            // Route and Branch
             const routeCell = document.createElement("td");
-            routeCell.textContent = row.route;
+            routeCell.textContent = row[0]; // Route ID
             tr.appendChild(routeCell);
 
-            ["Reduced", "Saturday", "Sunday", "Holiday", "Weekday"].forEach((sched) => {
+            const branchCell = document.createElement("td");
+            branchCell.textContent = row[1] || "Main"; // Branch Letter or "Main"
+            tr.appendChild(branchCell);
+
+            // Schedule buttons for each schedule type
+            ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((scheduleType, index) => {
+                const value = row[index + 2];
                 const cell = document.createElement("td");
-                if (row.schedule_type === sched) {
+
+                if (value === 0) {
+                    cell.textContent = "N/A"; // No trips
+                    cell.style.color = "#BDC3C7"; // Gray color
+                } else {
                     const button = document.createElement("button");
-                    button.textContent = sched;
-                    button.style.backgroundColor = row.meets_frequency ? "green" : "red";
+                    button.textContent = scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1);
+
+                    if (value === 1) {
+                        button.style.backgroundColor = "red"; // Frequency does not meet user desires
+                        button.style.color = "white";
+                    } else if (value === 2) {
+                        button.style.backgroundColor = "green"; // Frequency meets user desires
+                        button.style.color = "white";
+                    }
+
+                    button.classList.add("schedule-button");
                     cell.appendChild(button);
                 }
+
                 tr.appendChild(cell);
             });
 
-            tbody.appendChild(tr);
+            tableBody.appendChild(tr);
         });
     } catch (error) {
         console.error("Error fetching nearby stops:", error);
+        alert("There was an error fetching the data. Please try again.");
     } finally {
         hideLoading();
     }
 }
 
+// Attach event listener to the fetch button
 document.getElementById("get-stops-btn").addEventListener("click", fetchNearbyStops);
 
-// Handle button clicks
+// Handle button clicks for route visualization
 document.querySelectorAll('.route-btn').forEach(button => {
     button.addEventListener('click', async () => {
         const routeId = button.dataset.routeId;

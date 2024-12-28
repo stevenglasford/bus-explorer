@@ -9,12 +9,51 @@ import requests
 import os
 import multiprocessing as mp
 import numpy as np
+import sqlite3
 
 ##Constants
 GTFS_URL = "https://svc.metrotransit.org/mtgtfs/gtfs.zip"
 CACHE_DIR = "/tmp"
 GTFS_FILENAME = "gtfs.zip"
 COOKIE_NAME = "gtfs_last_updated"
+
+def load_gtfs_to_sql(gtfs_zip_path, db_path):
+    # Extract the GTFS zip file
+    with zipfile.ZipFile(gtfs_zip_path, 'r') as zip_ref:
+        zip_ref.extractall("gtfs_data")
+
+    # Connect to SQLite database (or create it)
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Define GTFS files and corresponding SQL table names
+    gtfs_files = [
+        "agency.txt",
+        "stops.txt",
+        "routes.txt",
+        "trips.txt",
+        "stop_times.txt",
+        "calendar.txt",
+        "calendar_dates.txt",
+        "shapes.txt"
+    ]
+
+    for file_name in gtfs_files:
+        file_path = os.path.join("gtfs_data", file_name)
+        if os.path.exists(file_path):
+            # Load the CSV file into a DataFrame
+            df = pd.read_csv(file_path)
+
+            # Create a table in SQLite
+            table_name = file_name.replace(".txt", "")
+            df.to_sql(table_name, conn, if_exists="replace", index=False)
+
+            print(f"Loaded {file_name} into table {table_name}.")
+
+    # Commit changes and close the connection
+    conn.commit()
+    conn.close()
+    print("GTFS data loaded into database successfully!")
 
 # Define a Blueprint
 main = Blueprint('main', __name__)
@@ -208,11 +247,12 @@ def download_gtfs_file():
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
     return gtfs_path
-
+# Update the handle_gtfs function
 @main.route('/api/gtfs')
 def handle_gtfs():
     """Check if the GTFS file needs to be updated or served."""
     gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
+    db_path = os.path.join(CACHE_DIR, "gtfs.db")  # Path for SQLite database
     last_modified_cookie = request.cookies.get(COOKIE_NAME)
 
     headers = {}
@@ -225,12 +265,18 @@ def handle_gtfs():
     if response.status_code == 304:
         # File has not been modified; serve the cached file
         if os.path.exists(gtfs_path):
+            # Ensure the SQLite database is loaded
+            if not os.path.exists(db_path):
+                load_gtfs_to_sql(gtfs_path, db_path)
             return send_file(gtfs_path)
 
     if response.status_code == 200:
         # File has been modified; download the updated file
         gtfs_path = download_gtfs_file()
         last_modified = response.headers.get("Last-Modified", datetime.now().strftime("%Y-%m-%d"))
+
+        # Load GTFS data into SQLite
+        load_gtfs_to_sql(gtfs_path, db_path)
 
         # Set a cookie with the new "Last-Modified" date
         response = make_response(send_file(gtfs_path))
@@ -298,105 +344,153 @@ def normalize_departure_time(time_str):
 
 @main.route('/api/schedule/nearby', methods=['GET'])
 def schedule_nearby():
-    """Find nearby stops and parse GTFS data for routes and branches."""
-    print("got to the nearby_stops")
+    """Find nearby stops and analyze GTFS data."""
     try:
         # Get user input
         user_lat = float(request.args.get("lat"))
         user_lon = float(request.args.get("lon"))
-        distance_feet = float(request.args.get("distance"))
+        distance_limit = float(request.args.get("distance"))
         frequency_limit = float(request.args.get("frequency"))
 
-        # Load GTFS data
-        print("Check for the gtfs")
-        handle_gtfs()
-        print("Got the gtfs")
-        gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
-        with zipfile.ZipFile(gtfs_path, 'r') as z:
-            with z.open('stops.txt') as f:
-                stops = pd.read_csv(f)
-            with z.open('stop_times.txt') as f:
-                stop_times = pd.read_csv(f)
-            with z.open('trips.txt') as f:
-                trips = pd.read_csv(f)
+        # Connect to the database
+        db_path = os.path.join(CACHE_DIR, "gtfs.db")
+        conn = sqlite3.connect(db_path)
 
-        print("Raw data loaded.")
-
-        # Step 1: Filter stops by distance
-        stops_coords = np.radians(stops[["stop_lat", "stop_lon"]].values)
-        user_coords = np.radians([user_lat, user_lon])
-        dlat = stops_coords[:, 0] - user_coords[0]
-        dlon = stops_coords[:, 1] - user_coords[1]
-        a = np.sin(dlat / 2) ** 2 + np.cos(stops_coords[:, 0]) * np.cos(user_coords[0]) * np.sin(dlon / 2) ** 2
-        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-        stops["distance"] = 6371000 * c * 3.28084  # Earth radius in meters, converted to feet
-        nearby_stops = stops[stops["distance"] <= distance_feet]
-        nearby_stop_ids = nearby_stops["stop_id"].astype(str).tolist()
-        print(f"Nearby stops filtered: {len(nearby_stops)} stops")
-
-        # Step 2: Filter stop_times for nearby stops
-        stop_times["stop_id"] = stop_times["stop_id"].astype(str)
-        filtered_stop_times = stop_times[stop_times["stop_id"].isin(nearby_stop_ids)].copy()
-
-        # Normalize departure times and add day offset
-        normalized_times = filtered_stop_times["departure_time"].apply(normalize_departure_time)
-        filtered_stop_times.loc[:, "normalized_time"] = normalized_times.apply(lambda x: x[0])
-        filtered_stop_times.loc[:, "day_offset"] = normalized_times.apply(lambda x: x[1])
-
-        # Combine normalized times and offsets
-        filtered_stop_times.loc[:, "departure_time_seconds"] = filtered_stop_times.apply(
-            lambda row: sum(int(t) * 60 ** i for i, t in enumerate(reversed(row["normalized_time"].split(":"))))
-            + row["day_offset"] * 86400,  # Add offset in seconds
-            axis=1,
+        # SQL query with bindings
+        query = """
+        WITH nearby_stops AS (
+            SELECT 
+                stop_id,
+                stop_lat,
+                stop_lon,
+                (
+                    6371000 * 2 * ATAN2(
+                        SQRT(
+                            SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                            COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                            SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+                        ),
+                        SQRT(1 - (
+                            SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                            COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                            SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+                        ))
+                    )
+                ) * 3.28084 AS distance_feet
+            FROM stops
+            WHERE (
+                6371000 * 2 * ATAN2(
+                    SQRT(
+                        SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                        COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                        SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+                    ),
+                    SQRT(1 - (
+                        SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                        COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                        SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+                    ))
+                )
+            ) * 3.28084 <= :distance_limit
+        ),
+        trip_times AS (
+            SELECT 
+                t.route_id,
+                t.branch_letter,
+                st.trip_id,
+                st.stop_id,
+                st.departure_time,
+                (
+                    CASE 
+                        WHEN CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) >= 24 
+                        THEN (CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) - 24) * 3600 +
+                             CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+                             CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER) + 86400
+                        ELSE CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) * 3600 +
+                             CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+                             CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER)
+                    END
+                ) AS departure_time_seconds,
+                (CASE 
+                    WHEN t.trip_id LIKE '%Reduced%' THEN 'Reduced'
+                    WHEN t.trip_id LIKE '%Holiday%' THEN 'Holiday'
+                    WHEN t.trip_id LIKE '%Saturday%' THEN 'Saturday'
+                    WHEN t.trip_id LIKE '%Sunday%' THEN 'Sunday'
+                    ELSE 'Weekday'
+                END) AS schedule_type
+            FROM stop_times st
+            JOIN trips t ON st.trip_id = t.trip_id
+            JOIN nearby_stops ns ON st.stop_id = ns.stop_id
+        ),
+        frequency_analysis AS (
+            SELECT 
+                route_id,
+                branch_letter,
+                schedule_type,
+                COUNT(*) AS total_trips,
+                MIN(departure_time_seconds) AS first_trip,
+                MAX(departure_time_seconds) AS last_trip,
+                CASE 
+                    WHEN COUNT(*) > 1 THEN (MAX(departure_time_seconds) - MIN(departure_time_seconds)) / (COUNT(*) - 1) / 60
+                    ELSE NULL
+                END AS average_frequency
+            FROM trip_times
+            GROUP BY route_id, branch_letter, schedule_type
+        ),
+        frequency_flags AS (
+            SELECT 
+                route_id,
+                branch_letter,
+                schedule_type,
+                total_trips,
+                first_trip,
+                last_trip,
+                average_frequency,
+                CASE 
+                    WHEN total_trips = 0 THEN 0
+                    WHEN average_frequency > :frequency_limit THEN 1
+                    ELSE 2
+                END AS frequency_flag
+            FROM frequency_analysis
         )
-        print("Normalized stop_times.")
+        SELECT 
+            route_id,
+            branch_letter,
+            MAX(CASE WHEN schedule_type = 'Reduced' THEN frequency_flag ELSE 0 END) AS reduced,
+            MAX(CASE WHEN schedule_type = 'Holiday' THEN frequency_flag ELSE 0 END) AS holiday,
+            MAX(CASE WHEN schedule_type = 'Saturday' THEN frequency_flag ELSE 0 END) AS saturday,
+            MAX(CASE WHEN schedule_type = 'Sunday' THEN frequency_flag ELSE 0 END) AS sunday,
+            MAX(CASE WHEN schedule_type = 'Weekday' THEN frequency_flag ELSE 0 END) AS weekday
+        FROM frequency_flags
+        GROUP BY route_id, branch_letter
+        ORDER BY route_id, branch_letter;
+        """
 
-        # Step 3: Merge stop_times with trips
-        merged_data = filtered_stop_times.merge(trips, on="trip_id")
+        # Execute the query with parameters
+        cursor = conn.cursor()
+        cursor.execute(query, {
+            "user_lat": user_lat,
+            "user_lon": user_lon,
+            "distance_limit": distance_limit,
+            "frequency_limit": frequency_limit
+        })
+        results = cursor.fetchall()
 
-        # Step 4: Sort trips by schedule type
-        schedule_types = ["Reduced", "Holiday", "Saturday", "Sunday", "Weekday"]
-        merged_data["schedule_type"] = merged_data["trip_id"].apply(
-            lambda x: next((sched for sched in schedule_types if sched in x), None)
-        )
-        merged_data = merged_data.sort_values(by="schedule_type")
-        print("Data sorted by schedule_type.")
-
-        # Step 5: Group by route_id and branch_letter
-        grouped = merged_data.groupby(["route_id", "branch_letter"])
-        frequency_data = []
-
-        for (route_id, branch_letter), group in grouped:
-            departure_times = group["departure_time_seconds"]
-            first_trip = departure_times.min()
-            last_trip = departure_times.max()
-            total_trips = len(departure_times)
-
-            if total_trips > 1:
-                average_frequency = (last_trip - first_trip) / (total_trips - 1) / 60  # Frequency in minutes
-            else:
-                average_frequency = float("inf")
-
-            meets_frequency = average_frequency <= frequency_limit
-
-            frequency_data.append({
-                "route": f"{route_id}{branch_letter}",
-                "schedule_type": group["schedule_type"].iloc[0],
-                "meets_frequency": bool(meets_frequency),  # Convert to native Python bool
-                "first_departure": f"{first_trip // 3600:02}:{(first_trip % 3600) // 60:02}:{first_trip % 60:02}",
-                "last_departure": f"{last_trip // 3600:02}:{(last_trip % 3600) // 60:02}:{last_trip % 60:02}",
-                "total_trips": total_trips,
-            })
+        # Close the connection
+        conn.close()
 
         print("Frequencies calculated.")
         with open("frequency_data.json", "w") as json_file:
-            json.dump(frequency_data, json_file, indent=4)
+            json.dump(results, json_file, indent=4)
 
-        return jsonify(frequency_data)
+
+
+        return jsonify(results)
 
     except Exception as e:
-        print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    
+
 
 
 @main.route('/api/route_shape', methods=['GET'])

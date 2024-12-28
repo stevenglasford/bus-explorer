@@ -13,3 +13,16 @@ trips_dump.csv
 unique_routes_dump.csv
 frequency_dump.txt
 frequency_data.json
+gtfs_data/agency.txt
+gtfs_data/calendar_dates.txt
+gtfs_data/feed_info.txt
+gtfs_data/calendar.txt
+gtfs_data/levels.txt
+gtfs_data/linked_datasets.txt
+gtfs_data/pathways.txt
+gtfs_data/routes.txt
+gtfs_data/shapes.txt
+gtfs_data/stop_times.txt
+gtfs_data/stops.txt
+gtfs_data/trips.txt
+gtfs_data/vehicles.txt

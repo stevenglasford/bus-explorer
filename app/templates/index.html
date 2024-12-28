@@ -9,9 +9,44 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style src="{{ url_for('static', filename='style.css') }}"></style>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        #controls {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+
         #loading-container {
             text-align: center;
-            margin-top: 20px;
+            margin: 20px auto;
+            display: none;
         }
 
         .spinner {
@@ -21,7 +56,7 @@
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto;
+            margin: 10px auto;
         }
 
         @keyframes spin {
@@ -32,65 +67,96 @@
                 transform: rotate(360deg);
             }
         }
-        #map {
-            height: 300px; /* Reduced height */
-            width: 80%; /* Adjust width as needed */
-            margin-top: 20px;
-            border: 1px solid #ccc; /* Optional: Add a border for better visibility */
-            border-radius: 8px; /* Optional: Add rounded corners */
-        }
+
         button {
-            margin-top: 10px;
-            padding: 10px;
+            padding: 10px 20px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
             font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
+
+        button:hover {
+            opacity: 0.9;
+            transform: scale(1.05);
+        }
+
         .route-btn {
-            display: block;
-            margin: 5px 0;
+            margin: 5px;
             padding: 10px;
+            border-radius: 5px;
             font-size: 14px;
+            display: inline-block;
             text-align: center;
         }
+
         .green {
             background-color: #4CAF50;
             color: white;
         }
+
         .red {
             background-color: #F44336;
             color: white;
+        }
+
+        .na {
+            background-color: #BDC3C7;
+            color: white;
+            cursor: not-allowed;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #routes-list {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .route-row {
+            background: #ecf0f1;
+            margin: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            width: 45%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 <body>
     <h1>Bus Explorer</h1>
 
-    <label for="frequency">Frequency (min):</label>
-    <input type="range" id="frequency" name="frequency" min="1" max="60" value="30" oninput="updateValue(this, 'frequencyValue')">
-    <span id="frequencyValue">30</span> min
+    <div id="controls">
+        <label for="frequency">Frequency (min):</label>
+        <input type="range" id="frequency" name="frequency" min="1" max="60" value="30" oninput="updateValue(this, 'frequencyValue')">
+        <span id="frequencyValue">30</span> min
 
-    <br />
+        <label for="distance">Distance (feet):</label>
+        <input type="range" id="distance" name="distance" min="100" max="5280" value="1000" oninput="updateValue(this, 'distanceValue')">
+        <span id="distanceValue">1000</span> feet
 
-    <label for="distance">Distance (feet):</label>
-    <input type="range" id="distance" name="distance" min="100" max="5280" value="1000" oninput="updateValue(this, 'distanceValue')">
-    <span id="distanceValue">1000</span> feet
+        <div id="loading-container">
+            <div class="spinner"></div>
+            <p>Loading... Please wait.</p>
+        </div>
 
-    <br />
-
-     <!-- Loading Container -->
-     <div id="loading-container" style="display: none;">
-        <div class="spinner"></div>
-        <p>Loading... Please wait.</p>
+        <button id="get-routes-btn" style="background-color: #3498db; color: white;">Get Routes and Stops</button>
     </div>
-    
-    <br />
 
-    <button id="get-routes-btn">Get Routes and Stops</button>
     <div id="routes-list"></div>
-    <br />
 
     <div id="map"></div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-
 </body>
 </html>
