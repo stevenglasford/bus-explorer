@@ -544,8 +544,7 @@ def schedule_nearby():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-
-
+#make a bus route on the map after the user clicks the bus route
 @main.route('/api/route_shape', methods=['GET'])
 def route_shape():
     """
@@ -622,4 +621,107 @@ def route_shape():
 
     except Exception as e:
         print(f"Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+#Find the POIs along the route
+@main.route('/api/pois_along_route', methods=['GET'])
+def pois_along_route():
+    print("Trying to find POIs along the route")
+    """
+    Fetch POIs along the specified route, filtered by direction and distance.
+    """
+    try:
+        # Retrieve route_id, branch_letter, user coordinates, and walking distance
+        route_id = request.args.get("route_id")
+        branch_letter = request.args.get("branch_letter", None)  # Optional
+        user_lat = float(request.args.get("lat"))
+        user_lon = float(request.args.get("lon"))
+        walking_distance = float(request.args.get("distance"))
+
+        if not route_id or not user_lat or not user_lon or not walking_distance:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+        # Connect to SQLite database
+        db_path = os.path.join(CACHE_DIR, "gtfs.db")
+        conn = sqlite3.connect(db_path)
+
+        # Query shape points for the route and branch
+        query = """
+            SELECT s.shape_pt_lat AS lat, s.shape_pt_lon AS lon, s.shape_pt_sequence AS seq
+            FROM shapes s
+            JOIN trips t ON s.shape_id = t.shape_id
+            WHERE t.route_id = ?
+        """
+        params = [route_id]
+        if branch_letter:
+            query += " AND t.branch_letter = ?"
+            params.append(branch_letter)
+        query += " ORDER BY s.shape_id, s.shape_pt_sequence"
+
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        shape_points = cursor.fetchall()
+        conn.close()
+
+        if not shape_points:
+            return jsonify({"error": "No shape data found for the specified route"}), 404
+
+        # Calculate the direction vector for the route
+        route_direction = (
+            shape_points[-1][0] - shape_points[0][0],
+            shape_points[-1][1] - shape_points[0][1]
+        )
+
+        # Fetch POIs from OSM within the bounding box of the route
+        bounding_box = (
+            min(lat for lat, _, _ in shape_points) - 0.01,
+            min(lon for _, lon, _ in shape_points) - 0.01,
+            max(lat for lat, _, _ in shape_points) + 0.01,
+            max(lon for _, lon, _ in shape_points) + 0.01
+        )
+
+        overpass_query = f"""
+        [out:json];
+        node
+          ["amenity"]
+          ({bounding_box[0]},{bounding_box[1]},{bounding_box[2]},{bounding_box[3]});
+        out body;
+        """
+        response = requests.post("https://overpass-api.de/api/interpreter", data={"data": overpass_query})
+        response.raise_for_status()
+        pois = response.json()["elements"]
+
+        # Filter POIs by walking distance and direction
+        filtered_pois = []
+        for poi in pois:
+            poi_lat = poi["lat"]
+            poi_lon = poi["lon"]
+
+            # Calculate distance from the user
+            distance = haversine_distance(user_lat, user_lon, poi_lat, poi_lon)
+            if distance > walking_distance:
+                continue
+
+            # Calculate direction relative to the route
+            direction_vector = (poi_lat - user_lat, poi_lon - user_lon)
+            dot_product = (
+                route_direction[0] * direction_vector[0] +
+                route_direction[1] * direction_vector[1]
+            )
+            if dot_product <= 0:  # Skip POIs opposite to the route's direction
+                continue
+
+            filtered_pois.append({
+                "name": poi.get("tags", {}).get("name", "Unknown POI"),
+                "type": poi.get("tags", {}).get("amenity", "Unknown Type"),
+                "distance": distance,
+                "coordinates": (poi_lat, poi_lon)
+            })
+
+        # Sort POIs by distance
+        filtered_pois.sort(key=lambda x: x["distance"])
+
+        return jsonify(filtered_pois)
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500

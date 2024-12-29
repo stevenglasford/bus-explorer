@@ -29,9 +29,12 @@
     <button id="get-stops-btn">Find Stops</button>
     <span id="loading-text" style="display: none; margin-left: 10px;">Loading...</span>
     <p id="user-location" style="margin-top: 20px;"></p> <!-- Location display -->
-    <div id="map" style="height: 400px; margin-top: 20px;"></div>
-    <!-- <div id="routes-container"></div> -->
-    <table id="routes-table" style="margin-top: 20px; width: 100%; border-collapse: collapse;">
+    <h2>Available Routes and Schedules</h2>
+    <h3>"No" means the route does not meet your frequency requirements</h3>
+    <h3>"Yes" means the route fits your frequency requirements</h3>
+    <h3>"N/A" means the route does not run on this schedule</h3>
+    
+    <table id="schedule-table" style="margin-top: 20px; width: 100%; border-collapse: collapse;">
         <thead>
             <tr>
                 <th>Route</th>
@@ -44,7 +47,31 @@
         </thead>
         <tbody></tbody>
     </table>
+
+
+    <div id="map" style="height: 400px; margin-top: 20px;"></div>
+    <!-- <div id="routes-container"></div> -->
+
+    <h2>Route Actions</h2>
+    <table id="action-table" style="margin-top: 20px; width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th>Route</th>
+                <th>Branch</th>
+                <th>Show Route</th>
+                <th>Find POIs</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    
+    <div id="poi-section" style="display: none; margin-top: 20px;">
+        <h3>Points of Interest Along the Route</h3>
+        <ul id="poi-list"></ul>
+    </div>
+    
     <script src="{{ url_for('static', filename='schedule_script.js') }}"></script>
+
 </body>
 </html>
 

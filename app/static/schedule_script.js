@@ -96,7 +96,6 @@ function updateManualLocation() {
     initMarker(userLat, userLng);
 }
 
-// Fetch nearby stops and update the table
 async function fetchNearbyStops() {
     const distance = document.getElementById("distance").value;
     const frequency = document.getElementById("frequency").value;
@@ -114,62 +113,147 @@ async function fetchNearbyStops() {
         });
 
         const data = response.data;
-        const tableBody = document.querySelector("#routes-table tbody");
-        tableBody.innerHTML = ""; // Clear previous rows
+
+        // Clear existing rows
+        const scheduleBody = document.querySelector("#schedule-table tbody");
+        const actionBody = document.querySelector("#action-table tbody");
+        scheduleBody.innerHTML = "";
+        actionBody.innerHTML = "";
 
         data.forEach((row) => {
+            // Update the schedule table
             const tr = document.createElement("tr");
+            const scheduleRow = document.createElement("tr");
 
-            // Route and Branch
             const routeCell = document.createElement("td");
             routeCell.textContent = row[0]; // Route ID
-            tr.appendChild(routeCell);
+            scheduleRow.appendChild(routeCell);
 
-            const branchCell = document.createElement("td");
-            branchCell.textContent = row[1] || "Main"; // Branch Letter or "Main"
-            tr.appendChild(branchCell);
+            const branchCell1 = document.createElement("td");
+            branchCell1.textContent = row[1] || "Main"; // Branch Letter or "Main"
+
+            scheduleRow.appendChild(branchCell1);
 
             // Schedule buttons for each schedule type
             ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((scheduleType, index) => {
-                const value = row[index + 2];
                 const cell = document.createElement("td");
+                const value = row[index + 2];
 
                 if (value === 0) {
-                    cell.textContent = "N/A"; // No trips
-                    cell.style.color = "#BDC3C7"; // Gray color
+                    cell.textContent = "N/A";
+                    cell.style.color = "#BDC3C7"; // Gray for no trips
                 } else {
-                    const button = document.createElement("button");
-                    button.textContent = scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1);
-
-                    button.dataset.routeId = row[0]; // Route ID
-                    button.dataset.branchLetter = row[1] || ""; // Branch Letter or empty
-
-                    if (value === 1) {
-                        button.style.backgroundColor = "red"; // Frequency does not meet user desires
-                        button.style.color = "white";
-                    } else if (value === 2) {
-                        button.style.backgroundColor = "green"; // Frequency meets user desires
-                        button.style.color = "white";
-                    }
-
-                    button.classList.add("schedule-button");
-
-                    // Attach event listener for route visualization
-                    button.addEventListener("click", handleRouteVisualization);
-
-                    cell.appendChild(button);
+                    cell.textContent = value === 1 ? "No" : "Yes"; // No if frequency doesn't meet
+                    cell.style.color = value === 1 ? "red" : "green";
                 }
 
-                tr.appendChild(cell);
+                scheduleRow.appendChild(cell);
             });
 
-            tableBody.appendChild(tr);
+            scheduleBody.appendChild(scheduleRow);
+
+            // Update the action table
+            const actionRow = document.createElement("tr");
+
+            const routeActionCell = document.createElement("td");
+            routeActionCell.textContent = row[0]; // Route ID
+            actionRow.appendChild(routeActionCell);
+
+            const branchCell = document.createElement("td");
+            branchCell.textContent = row[1] || "Main"; // Branch Letter or "Main"
+            actionRow.appendChild(branchCell);
+
+            const routeButtonCell = document.createElement("td");
+            const routeButton = document.createElement("button");
+            routeButton.textContent = "Show Route";
+            routeButton.classList.add("route-btn");
+            routeButton.dataset.routeId = row[0];
+            routeButton.dataset.branchLetter = row[1];
+            routeButton.addEventListener("click", () => {
+                fetchRouteShape(row[0], row[1]);
+            });
+            routeButtonCell.appendChild(routeButton);
+            actionRow.appendChild(routeButtonCell);
+
+            const poiButtonCell = document.createElement("td");
+            const poiButton = document.createElement("button");
+            poiButton.textContent = `Find POIs (${row[0]}${row[1] ? ` - ${row[1]}` : ""})`;
+            poiButton.classList.add("poi-btn");
+            poiButton.dataset.routeId = row[0];
+            poiButton.dataset.branchLetter = row[1];
+            poiButton.addEventListener("click", () => {
+                fetchPOIs(row[0], row[1]);
+            });
+            poiButtonCell.appendChild(poiButton);
+            actionRow.appendChild(poiButtonCell);
+
+            actionBody.appendChild(actionRow);
         });
     } catch (error) {
         console.error("Error fetching nearby stops:", error);
         alert("There was an error fetching the data. Please try again.");
     } finally {
         hideLoading();
+    }
+}
+
+// Fetch POIs for the selected route
+async function fetchPOIs(routeId, branchLetter) {
+    const distance = document.getElementById("distance").value;
+
+    try {
+        const response = await axios.get("/api/pois_along_route", {
+            params: {
+                route_id: routeId,
+                branch_letter: branchLetter,
+                lat: userLat,
+                lon: userLng,
+                distance
+            }
+        });
+
+        const pois = response.data;
+        const poiList = document.getElementById("poi-list");
+        poiList.innerHTML = "";
+
+        pois.forEach((poi) => {
+            const li = document.createElement("li");
+            li.textContent = `${poi.name} (${poi.type}) - ${poi.distance.toFixed(2)} ft`;
+            poiList.appendChild(li);
+        });
+
+        document.getElementById("poi-section").style.display = "block";
+    } catch (error) {
+        console.error("Error fetching POIs:", error);
+        alert("Error fetching points of interest. Please try again.");
+    }
+}
+
+// Fetch route shape and display on map
+async function fetchRouteShape(routeId, branchLetter) {
+    try {
+        const response = await axios.get("/api/route_shape", {
+            params: {
+                route_id: routeId,
+                branch_letter: branchLetter
+            }
+        });
+
+        const geojsonData = response.data;
+
+        if (routeLayer) {
+            map.removeLayer(routeLayer);
+        }
+
+        routeLayer = L.geoJSON(geojsonData, {
+            style: { color: "blue", weight: 4 }
+        }).addTo(map);
+
+        const bounds = routeLayer.getBounds();
+        map.fitBounds(bounds);
+    } catch (error) {
+        console.error("Error fetching route shape:", error);
+        alert("Could not load the route shape. Please try again.");
     }
 }
 
@@ -208,6 +292,48 @@ async function handleRouteVisualization(event) {
         alert("Could not load the route shape. Please try again.");
     }
 }
+
+// Fetch and display POIs along the selected route
+async function fetchPOIs(routeId, branchLetter) {
+    try {
+        const response = await axios.get("/api/pois_along_route", {
+            params: {
+                route_id: routeId,
+                branch_letter: branchLetter,
+                lat: userLat,
+                lon: userLng,
+                distance: document.getElementById("distance").value
+            }
+        });
+
+        const pois = response.data;
+        const poiList = document.getElementById("poi-list");
+        poiList.innerHTML = ""; // Clear existing POIs
+
+        pois.forEach((poi) => {
+            const li = document.createElement("li");
+            li.textContent = `${poi.name} (${poi.type}) - ${poi.distance.toFixed(2)} ft`;
+            poiList.appendChild(li);
+        });
+
+        document.getElementById("poi-section").style.display = "block";
+    } catch (error) {
+        console.error("Error fetching POIs:", error);
+        alert("Error fetching points of interest. Please try again.");
+    }
+}
+
+// Attach click event to route buttons
+document.querySelectorAll(".route-btn").forEach((button) => {
+    button.addEventListener("click", (event) => {
+        const routeId = event.target.dataset.routeId;
+        const branchLetter = event.target.dataset.branchLetter;
+
+        fetchRouteShape(routeId, branchLetter);
+        fetchPOIs(routeId, branchLetter);
+    });
+});
+
 
 
 // Attach event listener to the fetch button
