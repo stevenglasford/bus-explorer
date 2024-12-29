@@ -17,6 +17,35 @@ CACHE_DIR = "/tmp"
 GTFS_FILENAME = "gtfs.zip"
 COOKIE_NAME = "gtfs_last_updated"
 
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """
+    Calculate the great-circle distance between two points on the Earth
+    specified by latitude and longitude.
+
+    Parameters:
+    - lat1, lon1: Latitude and longitude of the first point in decimal degrees.
+    - lat2, lon2: Latitude and longitude of the second point in decimal degrees.
+
+    Returns:
+    - Distance in meters between the two points.
+    """
+    # Radius of the Earth in meters
+    R = 6371000  
+
+    # Convert latitude and longitude from degrees to radians
+    phi1 = radians(lat1)
+    phi2 = radians(lat2)
+    delta_phi = radians(lat2 - lat1)
+    delta_lambda = radians(lon2 - lon1)
+
+    # Haversine formula
+    a = sin(delta_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(delta_lambda / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    # Distance in meters
+    distance = R * c
+    return distance
+
 def load_gtfs_to_sql(gtfs_zip_path, db_path):
     # Extract the GTFS zip file
     with zipfile.ZipFile(gtfs_zip_path, 'r') as zip_ref:
@@ -626,12 +655,13 @@ def route_shape():
 #Find the POIs along the route
 @main.route('/api/pois_along_route', methods=['GET'])
 def pois_along_route():
-    print("Trying to find POIs along the route")
     """
-    Fetch POIs along the specified route, filtered by direction and distance.
+    Fetch POIs along the specified route, starting from the nearest stop to the user
+    and moving in the direction of the route.
     """
     try:
-        # Retrieve route_id, branch_letter, user coordinates, and walking distance
+        # Retrieve parameters
+        print("enter pois_along_route")
         route_id = request.args.get("route_id")
         branch_letter = request.args.get("branch_letter", None)  # Optional
         user_lat = float(request.args.get("lat"))
@@ -641,87 +671,111 @@ def pois_along_route():
         if not route_id or not user_lat or not user_lon or not walking_distance:
             return jsonify({"error": "Missing required parameters"}), 400
 
+        print("connect to database")
         # Connect to SQLite database
         db_path = os.path.join(CACHE_DIR, "gtfs.db")
         conn = sqlite3.connect(db_path)
 
-        # Query shape points for the route and branch
-        query = """
-            SELECT s.shape_pt_lat AS lat, s.shape_pt_lon AS lon, s.shape_pt_sequence AS seq
-            FROM shapes s
-            JOIN trips t ON s.shape_id = t.shape_id
+        print("find nearest stop to user")
+        # Step 1: Find the nearest stop to the user
+        nearest_stop_query = """
+            SELECT s.stop_id, s.stop_lat, s.stop_lon, st.stop_sequence
+            FROM stops s
+            JOIN stop_times st ON s.stop_id = st.stop_id
+            JOIN trips t ON st.trip_id = t.trip_id
             WHERE t.route_id = ?
         """
         params = [route_id]
         if branch_letter:
-            query += " AND t.branch_letter = ?"
+            nearest_stop_query += " AND t.branch_letter = ?"
             params.append(branch_letter)
-        query += " ORDER BY s.shape_id, s.shape_pt_sequence"
 
         cursor = conn.cursor()
-        cursor.execute(query, params)
-        shape_points = cursor.fetchall()
-        conn.close()
+        cursor.execute(nearest_stop_query, params)
+        stops = cursor.fetchall()
 
-        if not shape_points:
-            return jsonify({"error": "No shape data found for the specified route"}), 404
+        if not stops:
+            return jsonify({"error": "No stops found for the specified route"}), 404
 
-        # Calculate the direction vector for the route
-        route_direction = (
-            shape_points[-1][0] - shape_points[0][0],
-            shape_points[-1][1] - shape_points[0][1]
+        # Find the nearest stop to the user
+        nearest_stop = min(
+            stops,
+            key=lambda stop: haversine_distance(user_lat, user_lon, stop[1], stop[2])
         )
+        user_stop_sequence = nearest_stop[3]
 
-        # Fetch POIs from OSM within the bounding box of the route
-        bounding_box = (
-            min(lat for lat, _, _ in shape_points) - 0.01,
-            min(lon for _, lon, _ in shape_points) - 0.01,
-            max(lat for lat, _, _ in shape_points) + 0.01,
-            max(lon for _, lon, _ in shape_points) + 0.01
-        )
-
-        overpass_query = f"""
-        [out:json];
-        node
-          ["amenity"]
-          ({bounding_box[0]},{bounding_box[1]},{bounding_box[2]},{bounding_box[3]});
-        out body;
+        print("get all of the stops after the nearest stop")
+        # Step 2: Get all stops after the nearest stop
+        subsequent_stops_query = """
+            SELECT s.stop_id, s.stop_lat, s.stop_lon, st.stop_sequence
+            FROM stops s
+            JOIN stop_times st ON s.stop_id = st.stop_id
+            JOIN trips t ON st.trip_id = t.trip_id
+            WHERE t.route_id = ? AND st.stop_sequence >= ?
+            ORDER BY st.stop_sequence
         """
-        response = requests.post("https://overpass-api.de/api/interpreter", data={"data": overpass_query})
-        response.raise_for_status()
-        pois = response.json()["elements"]
+        params = [route_id, user_stop_sequence]
+        if branch_letter:
+            subsequent_stops_query += " AND t.branch_letter = ?"
+            params.append(branch_letter)
 
-        # Filter POIs by walking distance and direction
+        cursor.execute(subsequent_stops_query, params)
+        subsequent_stops = cursor.fetchall()
+
+        if not subsequent_stops:
+            return jsonify({"error": "No subsequent stops found for the specified route"}), 404
+
+        print("query OSM")
+        # Step 3: Query OSM for POIs near each subsequent stop
         filtered_pois = []
-        for poi in pois:
-            poi_lat = poi["lat"]
-            poi_lon = poi["lon"]
+        for stop in subsequent_stops:
+            stop_id, stop_lat, stop_lon, stop_sequence = stop
 
-            # Calculate distance from the user
-            distance = haversine_distance(user_lat, user_lon, poi_lat, poi_lon)
-            if distance > walking_distance:
-                continue
-
-            # Calculate direction relative to the route
-            direction_vector = (poi_lat - user_lat, poi_lon - user_lon)
-            dot_product = (
-                route_direction[0] * direction_vector[0] +
-                route_direction[1] * direction_vector[1]
+            # Query OSM for POIs near this stop
+            bounding_box = (
+                stop_lat - 0.01, stop_lon - 0.01, stop_lat + 0.01, stop_lon + 0.01
             )
-            if dot_product <= 0:  # Skip POIs opposite to the route's direction
-                continue
+            overpass_query = f"""
+            [out:json];
+            node
+              ["amenity"]
+              ({bounding_box[0]},{bounding_box[1]},{bounding_box[2]},{bounding_box[3]});
+            out body;
+            """
+            response = requests.post("https://overpass-api.de/api/interpreter", data={"data": overpass_query})
+            response.raise_for_status()
+            pois = response.json()["elements"]
 
-            filtered_pois.append({
-                "name": poi.get("tags", {}).get("name", "Unknown POI"),
-                "type": poi.get("tags", {}).get("amenity", "Unknown Type"),
-                "distance": distance,
-                "coordinates": (poi_lat, poi_lon)
-            })
+            # Filter POIs by walking distance
+            for poi in pois:
+                poi_lat = poi["lat"]
+                poi_lon = poi["lon"]
 
-        # Sort POIs by distance
-        filtered_pois.sort(key=lambda x: x["distance"])
+                # Calculate distance from the stop
+                distance = haversine_distance(stop_lat, stop_lon, poi_lat, poi_lon)
+                if distance <= walking_distance:
+                    filtered_pois.append({
+                        "name": poi.get("tags", {}).get("name", "Unknown POI"),
+                        "type": poi.get("tags", {}).get("amenity", "Unknown Type"),
+                        "distance": distance,
+                        "stop": {
+                            "stop_id": stop_id,
+                            "stop_sequence": stop_sequence,
+                            "stop_lat": stop_lat,
+                            "stop_lon": stop_lon
+                        },
+                        "coordinates": (poi_lat, poi_lon)
+                    })
+        print("sort POIs")
+        # Step 4: Sort POIs by stop_sequence and distance
+        filtered_pois.sort(key=lambda x: (x["stop"]["stop_sequence"], x["distance"]))
+
+        print("stops calculated")
+        with open("calculated_stops.json", "w") as json_file:
+            json.dump(filtered_pois, json_file, indent=4)
 
         return jsonify(filtered_pois)
 
     except Exception as e:
+        print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
