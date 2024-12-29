@@ -247,6 +247,7 @@ def download_gtfs_file():
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
     return gtfs_path
+
 # Update the handle_gtfs function
 @main.route('/api/gtfs')
 def handle_gtfs():
@@ -254,6 +255,19 @@ def handle_gtfs():
     gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
     db_path = os.path.join(CACHE_DIR, "gtfs.db")  # Path for SQLite database
     last_modified_cookie = request.cookies.get(COOKIE_NAME)
+
+    # Check if the GTFS file exists and is recent
+    if os.path.exists(gtfs_path):
+        file_age = (datetime.now() - datetime.fromtimestamp(os.path.getmtime(gtfs_path))).total_seconds()
+        if file_age < 86400:  # File is less than a day old
+            print("GTFS file is less than a day old. Skipping download.")
+            # Ensure the SQLite database exists
+            if not os.path.exists(db_path):
+                print("SQLite database missing. Loading GTFS data into database.")
+                load_gtfs_to_sql(gtfs_path, db_path)
+            else:
+                print("SQLite database exists. Skipping data reload.")
+            return send_file(gtfs_path)
 
     headers = {}
     if last_modified_cookie:
@@ -265,17 +279,22 @@ def handle_gtfs():
     if response.status_code == 304:
         # File has not been modified; serve the cached file
         if os.path.exists(gtfs_path):
-            # Ensure the SQLite database is loaded
+            print("GTFS file not modified. Serving cached file.")
             if not os.path.exists(db_path):
+                print("SQLite database missing. Loading GTFS data into database.")
                 load_gtfs_to_sql(gtfs_path, db_path)
+            else:
+                print("SQLite database exists. Skipping data reload.")
             return send_file(gtfs_path)
 
     if response.status_code == 200:
-        # File has been modified; download the updated file
+        # File has been modified or no cache exists; download the updated file
+        print("GTFS file updated. Downloading new file.")
         gtfs_path = download_gtfs_file()
         last_modified = response.headers.get("Last-Modified", datetime.now().strftime("%Y-%m-%d"))
 
         # Load GTFS data into SQLite
+        print("Reloading data into database.")
         load_gtfs_to_sql(gtfs_path, db_path)
 
         # Set a cookie with the new "Last-Modified" date
