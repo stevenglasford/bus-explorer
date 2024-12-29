@@ -1,5 +1,6 @@
 let userLat, userLng;
 let map, userMarker;
+let routeLayer = null; // For displaying selected routes on the map
 
 // Update the displayed value of sliders
 function updateValue(slider, spanId) {
@@ -45,6 +46,35 @@ async function getUserLocation() {
     }
 }
 
+// Fetch and display a route on the map
+async function fetchAndDisplayRoute(routeId, branchLetter = null) {
+    try {
+        const response = await axios.get("/api/route_shape", {
+            params: { route_id: routeId, branch_letter: branchLetter },
+        });
+
+        const geojsonData = response.data;
+
+        // Remove existing route layer if present
+        if (routeLayer) {
+            map.removeLayer(routeLayer);
+        }
+
+        // Add the new route layer
+        routeLayer = L.geoJSON(geojsonData, {
+            style: { color: "blue", weight: 4 },
+        }).addTo(map);
+
+        // Adjust map view to fit the route
+        const bounds = routeLayer.getBounds();
+        map.fitBounds(bounds);
+    } catch (error) {
+        console.error("Error fetching route shape:", error);
+        alert("Unable to display the route. Please try again.");
+    }
+}
+
+// Fetch routes and stops and update the list
 async function fetchRoutesAndStops() {
     const distance = document.getElementById("distance").value;
     const frequency = document.getElementById("frequency").value;
@@ -79,6 +109,20 @@ async function fetchRoutesAndStops() {
             const routeInfo = document.createElement("span");
             routeInfo.textContent = `Route ${route[0]}${route[1] ? ` - Branch ${route[1]}` : ""}: `;
             routeRow.appendChild(routeInfo);
+
+            // Add Route Button
+            const routeButton = document.createElement("button");
+            routeButton.textContent = "View Route";
+            routeButton.classList.add("route-btn");
+            routeButton.style.backgroundColor = "blue";
+            routeButton.style.color = "white";
+
+            // Attach event to display the route on the map
+            routeButton.addEventListener("click", () => {
+                fetchAndDisplayRoute(route[0], route[1]);
+            });
+
+            routeRow.appendChild(routeButton);
 
             // Add Buttons for Each Schedule Type
             ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((schedType, index) => {

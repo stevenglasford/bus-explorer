@@ -546,50 +546,80 @@ def schedule_nearby():
     
 
 
-
 @main.route('/api/route_shape', methods=['GET'])
 def route_shape():
-    """Return the shape of the selected route."""
+    """
+    Fetch and return the GeoJSON shape of a specified route and branch.
+    """
+    print('Trying to shape out the route')
     try:
+        # Retrieve route_id and branch_letter from request parameters
         route_id = request.args.get("route_id")
-        branch_letter = request.args.get("branch_letter")
-        
-        # Load GTFS data
-        gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
-        with zipfile.ZipFile(gtfs_path, 'r') as z:
-            with z.open('shapes.txt') as f:
-                shapes = pd.read_csv(f)
-            with z.open('trips.txt') as f:
-                trips = pd.read_csv(f)
+        branch_letter = request.args.get("branch_letter", None)  # Optional
 
-        # Filter trips for the selected route and branch
-        selected_trips = trips[
-            (trips["route_id"] == route_id) & 
-            (trips["branch_letter"] == branch_letter)
-        ]
-        shape_ids = selected_trips["shape_id"].unique()
+        if not route_id:
+            return jsonify({"error": "Route ID is required"}), 400
 
-        # Filter shapes for the selected trips
-        route_shapes = shapes[shapes["shape_id"].isin(shape_ids)]
-        route_shapes = route_shapes.sort_values(by=["shape_id", "shape_pt_sequence"])
+        # Connect to SQLite database
+        db_path = os.path.join(CACHE_DIR, "gtfs.db")
+        conn = sqlite3.connect(db_path)
 
-        # Prepare GeoJSON data
-        geojson_data = {
+        # Build SQL query to get shape data
+        query = """
+            SELECT s.shape_id, s.shape_pt_lat AS lat, s.shape_pt_lon AS lon, s.shape_pt_sequence AS seq
+            FROM shapes s
+            JOIN trips t ON s.shape_id = t.shape_id
+            WHERE t.route_id = ?
+        """
+
+        params = [route_id]
+
+        # If branch_letter is provided, add it to the query
+        if branch_letter:
+            query += " AND t.branch_letter = ?"
+            params.append(branch_letter)
+
+        query += " ORDER BY s.shape_id, s.shape_pt_sequence"
+
+        # Execute query
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return jsonify({"error": "No shape data found for the specified route and branch"}), 404
+
+        # Group data by shape_id
+        from collections import defaultdict
+        shapes = defaultdict(list)
+        for row in rows:
+            shape_id = row[0]
+            lat, lon = row[1], row[2]
+            shapes[shape_id].append((lon, lat))  # (lon, lat) format
+
+        # Prepare GeoJSON structure
+        geojson = {
             "type": "FeatureCollection",
             "features": []
         }
-        for shape_id, shape_group in route_shapes.groupby("shape_id"):
-            coordinates = shape_group[["shape_pt_lon", "shape_pt_lat"]].values.tolist()
-            geojson_data["features"].append({
+
+        for shape_id, coordinates in shapes.items():
+            geojson["features"].append({
                 "type": "Feature",
                 "geometry": {
                     "type": "LineString",
                     "coordinates": coordinates
                 },
-                "properties": {"shape_id": shape_id}
+                "properties": {
+                    "route_id": route_id,
+                    "branch_letter": branch_letter,
+                    "shape_id": shape_id
+                }
             })
 
-        return jsonify(geojson_data)
+        return jsonify(geojson)
 
     except Exception as e:
+        print(f"Error: {e}")
         return jsonify({"error": str(e)}), 500

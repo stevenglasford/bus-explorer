@@ -141,6 +141,9 @@ async function fetchNearbyStops() {
                     const button = document.createElement("button");
                     button.textContent = scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1);
 
+                    button.dataset.routeId = row[0]; // Route ID
+                    button.dataset.branchLetter = row[1] || ""; // Branch Letter or empty
+
                     if (value === 1) {
                         button.style.backgroundColor = "red"; // Frequency does not meet user desires
                         button.style.color = "white";
@@ -150,6 +153,10 @@ async function fetchNearbyStops() {
                     }
 
                     button.classList.add("schedule-button");
+
+                    // Attach event listener for route visualization
+                    button.addEventListener("click", handleRouteVisualization);
+
                     cell.appendChild(button);
                 }
 
@@ -165,6 +172,43 @@ async function fetchNearbyStops() {
         hideLoading();
     }
 }
+
+// Handle route visualization when a button is clicked
+async function handleRouteVisualization(event) {
+    const routeId = event.target.dataset.routeId;
+    const branchLetter = event.target.dataset.branchLetter;
+
+    if (!routeId) {
+        console.error("Route ID is missing.");
+        return;
+    }
+
+    try {
+        const response = await axios.get("/api/route_shape", {
+            params: { route_id: routeId, branch_letter: branchLetter },
+        });
+
+        const geojsonData = response.data;
+
+        // Remove the existing route layer if present
+        if (routeLayer) {
+            map.removeLayer(routeLayer);
+        }
+
+        // Add the new route layer
+        routeLayer = L.geoJSON(geojsonData, {
+            style: { color: "blue", weight: 4 },
+        }).addTo(map);
+
+        // Adjust the map view to fit the route
+        const bounds = routeLayer.getBounds();
+        map.fitBounds(bounds);
+    } catch (error) {
+        console.error("Error fetching route shape:", error);
+        alert("Could not load the route shape. Please try again.");
+    }
+}
+
 
 // Attach event listener to the fetch button
 document.getElementById("get-stops-btn").addEventListener("click", fetchNearbyStops);
