@@ -255,6 +255,7 @@ def handle_gtfs():
     gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
     db_path = os.path.join(CACHE_DIR, "gtfs.db")  # Path for SQLite database
     last_modified_cookie = request.cookies.get(COOKIE_NAME)
+    # last_load_cookie = request.cookies.get(COOKIE_NAME)
 
     # Check if the GTFS file exists and is recent
     if os.path.exists(gtfs_path):
@@ -304,6 +305,38 @@ def handle_gtfs():
 
     # Handle errors gracefully
     return jsonify({"error": "Failed to fetch GTFS data"}), response.status_code
+
+
+# @main.route('/api/gtfs')
+# def handle_gtfs():
+#     """Handle GTFS file fetching and database loading."""
+#     gtfs_path = os.path.join(CACHE_DIR, GTFS_FILENAME)
+#     db_path = os.path.join(CACHE_DIR, "gtfs.db")  # Path for SQLite database
+#     last_load_cookie = request.cookies.get(COOKIE_NAME)
+
+#     # Check if this is a fresh load (no cookie) or the file is missing
+#     if not last_load_cookie or not os.path.exists(gtfs_path):
+#         print("Fresh page load or missing GTFS file. Fetching data.")
+#         gtfs_path = download_gtfs_file()
+#         load_gtfs_to_sql(gtfs_path, db_path)
+
+#         # Set a cookie to track this load
+#         last_loaded_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+#         response = make_response(send_file(gtfs_path))
+#         response.set_cookie(COOKIE_NAME, last_loaded_time, max_age=7 * 24 * 60 * 60)  # Cookie expires in 7 days
+#         return response
+
+#     # If the GTFS file exists and cookie is present, check if the database exists
+#     if os.path.exists(gtfs_path):
+#         if not os.path.exists(db_path):
+#             print("SQLite database missing. Reloading GTFS data into the database.")
+#             load_gtfs_to_sql(gtfs_path, db_path)
+#         else:
+#             print("SQLite database exists. Skipping data reload.")
+#         return send_file(gtfs_path)
+
+#     # Default to a graceful failure if something unexpected occurs
+#     return jsonify({"error": "Failed to fetch GTFS data"}), 500
 
 
 @main.route('/api/schedule', methods=['GET'])
