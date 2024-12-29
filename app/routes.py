@@ -346,6 +346,8 @@ def normalize_departure_time(time_str):
 def schedule_nearby():
     """Find nearby stops and analyze GTFS data."""
     try:
+        ## handle gtfs
+        handle_gtfs()
         # Get user input
         user_lat = float(request.args.get("lat"))
         user_lon = float(request.args.get("lon"))
