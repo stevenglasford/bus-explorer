@@ -45,9 +45,7 @@ async function getUserLocation() {
     }
 }
 
-// Fetch nearby routes and stops from the API
 async function fetchRoutesAndStops() {
-    console.log("Fetching routes and stops...");
     const distance = document.getElementById("distance").value;
     const frequency = document.getElementById("frequency").value;
 
@@ -60,8 +58,8 @@ async function fetchRoutesAndStops() {
     loadingContainer.style.display = "block";
 
     try {
-        const response = await axios.get("/api/routes", {
-            params: { lat: userLat, lon: userLng, radius: distance, frequency }
+        const response = await axios.get("/api/schedule/nearby", {
+            params: { lat: userLat, lon: userLng, distance, frequency },
         });
 
         const data = response.data;
@@ -71,53 +69,39 @@ async function fetchRoutesAndStops() {
 
         // Update the routes list
         const routesList = document.getElementById("routes-list");
-        routesList.innerHTML = ""; // Clear previous data
+        routesList.innerHTML = ""; // Clear previous rows
 
         data.forEach((route) => {
-            const row = document.createElement("div");
-            row.classList.add("route-row");
+            const routeRow = document.createElement("div");
+            routeRow.classList.add("route-row");
 
-            const routeInfo = document.createElement("div");
-            routeInfo.textContent = `Route ${route[0]} - ${route[1] || "Main"}`;
-            routeInfo.style.fontWeight = "bold";
-            row.appendChild(routeInfo);
+            // Add Route and Branch Information
+            const routeInfo = document.createElement("span");
+            routeInfo.textContent = `Route ${route[0]}${route[1] ? ` - Branch ${route[1]}` : ""}: `;
+            routeRow.appendChild(routeInfo);
 
-            ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((scheduleType, index) => {
-                const value = route[index + 2];
+            // Add Buttons for Each Schedule Type
+            ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((schedType, index) => {
+                const button = document.createElement("button");
+                const flag = route[2 + index]; // Start from the 3rd column for schedule flags
 
-                if (value === 0) {
-                    // No trips for this schedule type
-                    const span = document.createElement("span");
-                    span.textContent = "N/A";
-                    span.style.marginRight = "10px";
-                    span.style.color = "#BDC3C7"; // Gray color for "N/A"
-                    row.appendChild(span);
+                if (flag === 0) {
+                    button.style.display = "none"; // Hide button if no trips
                 } else {
-                    // Create a button for valid schedule types
-                    const button = document.createElement("button");
-                    button.textContent = scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1);
-
-                    // Set button color based on frequency flag
-                    if (value === 1) {
-                        button.style.backgroundColor = "red"; // Frequency does not meet user desires
-                        button.style.color = "white";
-                    } else if (value === 2) {
-                        button.style.backgroundColor = "green"; // Frequency meets user desires
-                        button.style.color = "white";
-                    }
-
+                    button.textContent = schedType.charAt(0).toUpperCase() + schedType.slice(1); // Capitalize label
+                    button.style.backgroundColor = flag === 1 ? "red" : "green"; // Red for 1, Green for 2
                     button.classList.add("schedule-button");
-                    row.appendChild(button);
                 }
+
+                routeRow.appendChild(button);
             });
 
-            routesList.appendChild(row);
+            routesList.appendChild(routeRow);
         });
     } catch (error) {
         console.error("Error fetching routes and stops:", error);
         alert("There was an error fetching the data. Please try again.");
-
-        // Hide loading spinner
+    } finally {
         loadingContainer.style.display = "none";
     }
 }

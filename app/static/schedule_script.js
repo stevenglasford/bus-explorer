@@ -1,6 +1,10 @@
 // Initialize map
 const map = L.map("map").setView([44.9778, -93.2650], 13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+let userMarker = null;
+let userLat = 44.9778; // Default latitude
+let userLng = -93.2650; // Default longitude
+let isManualInput = false;
 let loadingInterval;
 let routeLayer; // Store the current route layer
 
@@ -26,6 +30,51 @@ function hideLoading() {
 function updateLocationDisplay(lat, lon) {
     const locationElement = document.getElementById("user-location");
     locationElement.textContent = `Your Location: Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
+}
+
+// Initialize the map marker for the user
+function initMarker(lat, lon) {
+    if (userMarker) {
+        map.removeLayer(userMarker);
+    }
+    userMarker = L.marker([lat, lon], { draggable: true }).addTo(map).bindPopup('Drag to set your location').openPopup();
+    userMarker.on("dragend", function (event) {
+        const position = event.target.getLatLng();
+        userLat = position.lat;
+        userLng = position.lng;
+        updateLocationDisplay(userLat, userLng);
+    });
+    updateLocationDisplay(lat, lon);
+}
+
+// Handle manual input toggle
+document.getElementById("manual-coordinates").addEventListener("change", (e) => {
+    isManualInput = e.target.checked;
+    const latitudeField = document.getElementById("latitude");
+    const longitudeField = document.getElementById("longitude");
+    latitudeField.disabled = !isManualInput;
+    longitudeField.disabled = !isManualInput;
+
+    if (isManualInput) {
+        latitudeField.value = userLat.toFixed(6);
+        longitudeField.value = userLng.toFixed(6);
+    }
+});
+
+// Update location based on manual input
+function updateManualLocation() {
+    const latInput = parseFloat(document.getElementById("latitude").value.trim());
+    const lonInput = parseFloat(document.getElementById("longitude").value.trim());
+
+    if (isNaN(latInput) || isNaN(lonInput) || latInput < -90 || latInput > 90 || lonInput < -180 || lonInput > 180) {
+        alert("Invalid coordinates. Please enter valid latitude and longitude.");
+        return;
+    }
+
+    userLat = latInput;
+    userLng = lonInput;
+    map.setView([userLat, userLng], 13);
+    initMarker(userLat, userLng);
 }
 
 // Validate and parse manual coordinates
@@ -167,3 +216,33 @@ document.querySelectorAll('.route-btn').forEach(button => {
         }
     });
 });
+
+// Event listeners
+document.getElementById("get-stops-btn").addEventListener("click", fetchNearbyStops);
+document.getElementById("latitude").addEventListener("change", updateManualLocation);
+document.getElementById("longitude").addEventListener("change", updateManualLocation);
+
+// Get user's geolocation
+function getUserLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                userLat = position.coords.latitude;
+                userLng = position.coords.longitude;
+                map.setView([userLat, userLng], 13);
+                initMarker(userLat, userLng);
+            },
+            () => {
+                alert("Unable to retrieve location. Please use manual input.");
+                initMarker(userLat, userLng); // Default location
+            }
+        );
+    } else {
+        alert("Geolocation is not supported by your browser.");
+        initMarker(userLat, userLng); // Default location
+    }
+}
+
+// Initialize location on page load
+window.onload = getUserLocation;
+
