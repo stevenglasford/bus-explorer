@@ -1,6 +1,7 @@
 from flask import Blueprint, json, render_template, jsonify, request, make_response, send_file
 from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import zipfile
 import pandas as pd
 from .services import fetch_routes, fetch_stops, fetch_departures, fetch_stops_nearby, check_route_frequency, fetch_osm_bus_stops, fetch_stop_departures, calculate_frequency, fetch_osm_bus_stops, fetch_all_departures, calculate_frequency
@@ -652,7 +653,6 @@ def route_shape():
         print(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
 
-#Find the POIs along the route
 @main.route('/api/pois_along_route', methods=['GET'])
 def pois_along_route():
     """
@@ -661,7 +661,6 @@ def pois_along_route():
     """
     try:
         # Retrieve parameters
-        print("enter pois_along_route")
         route_id = request.args.get("route_id")
         branch_letter = request.args.get("branch_letter", None)  # Optional
         user_lat = float(request.args.get("lat"))
@@ -671,12 +670,10 @@ def pois_along_route():
         if not route_id or not user_lat or not user_lon or not walking_distance:
             return jsonify({"error": "Missing required parameters"}), 400
 
-        print("connect to database")
         # Connect to SQLite database
         db_path = os.path.join(CACHE_DIR, "gtfs.db")
         conn = sqlite3.connect(db_path)
 
-        print("find nearest stop to user")
         # Step 1: Find the nearest stop to the user
         nearest_stop_query = """
             SELECT s.stop_id, s.stop_lat, s.stop_lon, st.stop_sequence
@@ -704,7 +701,6 @@ def pois_along_route():
         )
         user_stop_sequence = nearest_stop[3]
 
-        print("get all of the stops after the nearest stop")
         # Step 2: Get all stops after the nearest stop
         subsequent_stops_query = """
             SELECT s.stop_id, s.stop_lat, s.stop_lon, st.stop_sequence
@@ -725,13 +721,9 @@ def pois_along_route():
         if not subsequent_stops:
             return jsonify({"error": "No subsequent stops found for the specified route"}), 404
 
-        print("query OSM")
-        # Step 3: Query OSM for POIs near each subsequent stop
-        filtered_pois = []
-        for stop in subsequent_stops:
+        # Step 3: Parallelize OSM queries for all stops
+        def fetch_pois_for_stop(stop):
             stop_id, stop_lat, stop_lon, stop_sequence = stop
-
-            # Query OSM for POIs near this stop
             bounding_box = (
                 stop_lat - 0.01, stop_lon - 0.01, stop_lat + 0.01, stop_lon + 0.01
             )
@@ -747,6 +739,7 @@ def pois_along_route():
             pois = response.json()["elements"]
 
             # Filter POIs by walking distance
+            filtered = []
             for poi in pois:
                 poi_lat = poi["lat"]
                 poi_lon = poi["lon"]
@@ -754,7 +747,7 @@ def pois_along_route():
                 # Calculate distance from the stop
                 distance = haversine_distance(stop_lat, stop_lon, poi_lat, poi_lon)
                 if distance <= walking_distance:
-                    filtered_pois.append({
+                    filtered.append({
                         "name": poi.get("tags", {}).get("name", "Unknown POI"),
                         "type": poi.get("tags", {}).get("amenity", "Unknown Type"),
                         "distance": distance,
@@ -766,13 +759,22 @@ def pois_along_route():
                         },
                         "coordinates": (poi_lat, poi_lon)
                     })
-        print("sort POIs")
+            return filtered
+
+        # Use ThreadPoolExecutor to parallelize OSM queries
+        filtered_pois = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_stop = {executor.submit(fetch_pois_for_stop, stop): stop for stop in subsequent_stops}
+
+            for future in as_completed(future_to_stop):
+                try:
+                    result = future.result()
+                    filtered_pois.extend(result)
+                except Exception as e:
+                    print(f"Error fetching POIs for stop: {e}")
+
         # Step 4: Sort POIs by stop_sequence and distance
         filtered_pois.sort(key=lambda x: (x["stop"]["stop_sequence"], x["distance"]))
-
-        print("stops calculated")
-        with open("calculated_stops.json", "w") as json_file:
-            json.dump(filtered_pois, json_file, indent=4)
 
         return jsonify(filtered_pois)
 
