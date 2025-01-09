@@ -439,127 +439,385 @@ def schedule_nearby():
         # Connect to the database
         db_path = os.path.join(CACHE_DIR, "gtfs.db")
         conn = sqlite3.connect(db_path)
-
+        print("part1")
         # SQL query with bindings
         query = """
-        WITH nearby_stops AS (
-            SELECT 
-                stop_id,
-                stop_lat,
-                stop_lon,
-                (
-                    6371000 * 2 * ATAN2(
-                        SQRT(
-                            SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
-                            COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
-                            SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
-                        ),
-                        SQRT(1 - (
-                            SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
-                            COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
-                            SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
-                        ))
-                    )
-                ) * 3.28084 AS distance_feet
-            FROM stops
-            WHERE (
-                6371000 * 2 * ATAN2(
-                    SQRT(
-                        SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
-                        COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
-                        SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
-                    ),
-                    SQRT(1 - (
-                        SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
-                        COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
-                        SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
-                    ))
-                )
-            ) * 3.28084 <= :distance_limit
-        ),
-        trip_times AS (
-            SELECT 
-                t.route_id,
-                t.branch_letter,
-                st.trip_id,
-                st.stop_id,
-                st.departure_time,
-                (
-                    CASE 
-                        WHEN CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) >= 24 
-                        THEN (CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) - 24) * 3600 +
-                             CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
-                             CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER) + 86400
-                        ELSE CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) * 3600 +
-                             CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
-                             CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER)
-                    END
-                ) AS departure_time_seconds,
-                (CASE 
-                    WHEN t.trip_id LIKE '%Reduced%' THEN 'Reduced'
-                    WHEN t.trip_id LIKE '%Holiday%' THEN 'Holiday'
-                    WHEN t.trip_id LIKE '%Saturday%' THEN 'Saturday'
-                    WHEN t.trip_id LIKE '%Sunday%' THEN 'Sunday'
-                    ELSE 'Weekday'
-                END) AS schedule_type
-            FROM stop_times st
-            JOIN trips t ON st.trip_id = t.trip_id
-            JOIN nearby_stops ns ON st.stop_id = ns.stop_id
-        ),
-        frequency_analysis AS (
-            SELECT 
-                route_id,
-                branch_letter,
-                schedule_type,
-                COUNT(*) AS total_trips,
-                MIN(departure_time_seconds) AS first_trip,
-                MAX(departure_time_seconds) AS last_trip,
-                CASE 
-                    WHEN COUNT(*) > 1 THEN (MAX(departure_time_seconds) - MIN(departure_time_seconds)) / (COUNT(*) - 1) / 60
-                    ELSE NULL
-                END AS average_frequency
-            FROM trip_times
-            GROUP BY route_id, branch_letter, schedule_type
-        ),
-        frequency_flags AS (
-            SELECT 
-                route_id,
-                branch_letter,
-                schedule_type,
-                total_trips,
-                first_trip,
-                last_trip,
-                average_frequency,
-                CASE 
-                    WHEN total_trips = 0 THEN 0
-                    WHEN average_frequency > :frequency_limit THEN 1
-                    ELSE 2
-                END AS frequency_flag
-            FROM frequency_analysis
+WITH nearby_stops AS (
+    SELECT 
+        stop_id,
+        stop_lat,
+        stop_lon,
+        (
+            6371000 * 2 * ATAN2(
+                SQRT(
+                    SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                    COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                    SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+                ),
+                SQRT(1 - (
+                    SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                    COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                    SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+                ))
+            )
+        ) * 3.28084 AS distance_feet
+    FROM stops
+    WHERE (
+        6371000 * 2 * ATAN2(
+            SQRT(
+                SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+            ),
+            SQRT(1 - (
+                SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+                COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+                SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+            ))
         )
-        SELECT 
-            route_id,
-            branch_letter,
-            MAX(CASE WHEN schedule_type = 'Reduced' THEN frequency_flag ELSE 0 END) AS reduced,
-            MAX(CASE WHEN schedule_type = 'Holiday' THEN frequency_flag ELSE 0 END) AS holiday,
-            MAX(CASE WHEN schedule_type = 'Saturday' THEN frequency_flag ELSE 0 END) AS saturday,
-            MAX(CASE WHEN schedule_type = 'Sunday' THEN frequency_flag ELSE 0 END) AS sunday,
-            MAX(CASE WHEN schedule_type = 'Weekday' THEN frequency_flag ELSE 0 END) AS weekday
-        FROM frequency_flags
-        GROUP BY route_id, branch_letter
-        ORDER BY route_id, branch_letter;
-        """
+    ) * 3.28084 <= :distance_limit
+),
+trip_times AS (
+    SELECT 
+        t.route_id,
+        t.branch_letter,
+        st.trip_id,
+        st.stop_id,
+        st.departure_time,
+        (
+            CASE
+                WHEN CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) >= 24 THEN
+                    (CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) - 24) * 3600 +
+                    CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+                    CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER) + 86400
+                ELSE
+                    CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) * 3600 +
+                    CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+                    CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER)
+            END
+        ) AS departure_time_seconds,
+        (CASE 
+            WHEN t.trip_id LIKE '%Reduced%' THEN 'Reduced'
+            WHEN t.trip_id LIKE '%Holiday%' THEN 'Holiday'
+            WHEN t.trip_id LIKE '%Saturday%' THEN 'Saturday'
+            WHEN t.trip_id LIKE '%Sunday%' THEN 'Sunday'
+            ELSE 'Weekday'
+        END) AS schedule_type
+    FROM stop_times st
+    JOIN trips t ON st.trip_id = t.trip_id
+    JOIN nearby_stops ns ON st.stop_id = ns.stop_id
+    WHERE st.departure_time IS NOT NULL
+),
+lagged_times AS (
+    SELECT 
+        route_id,
+        branch_letter,
+        schedule_type,
+        departure_time_seconds,
+        departure_time_seconds - LAG(departure_time_seconds) OVER (
+            PARTITION BY route_id, branch_letter, schedule_type ORDER BY departure_time_seconds
+        ) AS frequency_gap
+    FROM trip_times
+),
+frequency_analysis AS (
+    SELECT 
+        route_id,
+        branch_letter,
+        schedule_type,
+        COUNT(*) AS total_trips,
+        MIN(departure_time_seconds) AS first_trip,
+        MAX(departure_time_seconds) AS last_trip,
+        AVG(frequency_gap) / 60 AS average_frequency,
+        MIN(frequency_gap) / 60 AS min_frequency_minutes,
+        MAX(frequency_gap) / 60 AS max_frequency_minutes
+    FROM lagged_times
+    GROUP BY route_id, branch_letter, schedule_type
+),
+frequency_flags AS (
+    SELECT 
+        route_id,
+        branch_letter,
+        schedule_type,
+        total_trips,
+        first_trip,
+        last_trip,
+        average_frequency,
+        min_frequency_minutes,
+        max_frequency_minutes,
+        CASE 
+            WHEN total_trips = 0 THEN 0
+            WHEN average_frequency > :frequency_limit THEN 1
+            ELSE 2
+        END AS frequency_flag
+    FROM frequency_analysis
+)
+SELECT 
+    route_id,
+    branch_letter,
+    MAX(CASE WHEN schedule_type = 'Reduced' THEN frequency_flag ELSE 0 END) AS reduced,
+    MAX(CASE WHEN schedule_type = 'Holiday' THEN frequency_flag ELSE 0 END) AS holiday,
+    MAX(CASE WHEN schedule_type = 'Saturday' THEN frequency_flag ELSE 0 END) AS saturday,
+    MAX(CASE WHEN schedule_type = 'Sunday' THEN frequency_flag ELSE 0 END) AS sunday,
+    MAX(CASE WHEN schedule_type = 'Weekday' THEN frequency_flag ELSE 0 END) AS weekday,
+    MIN(first_trip) AS first_run_seconds,
+    MAX(last_trip) AS last_run_seconds,
+    MAX(total_trips) AS total_trips,
+    MIN(min_frequency_minutes) AS most_frequent_minutes,
+    MAX(max_frequency_minutes) AS least_frequent_minutes
+FROM frequency_flags
+GROUP BY route_id, branch_letter
+ORDER BY route_id, branch_letter;
 
+
+     """
+
+#         test0 = """
+# SELECT 
+#     t.route_id,
+#     t.branch_letter,
+#     st.trip_id,
+#     st.departure_time,
+#     LAG(st.departure_time) OVER (
+#         PARTITION BY t.route_id, t.branch_letter
+#         ORDER BY st.departure_time
+#     ) AS prev_departure_time
+# FROM stop_times st
+# JOIN trips t ON st.trip_id = t.trip_id
+# LIMIT 10;
+
+# """
+
+#         test1 = """
+# SELECT 
+#     st.departure_time,
+#     CASE
+#         WHEN CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) >= 24 THEN
+#             (CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) - 24) * 3600 +
+#             CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+#             CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER) + 86400
+#         ELSE
+#             CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) * 3600 +
+#             CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+#             CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER)
+#     END AS departure_time_seconds
+# FROM stop_times st
+# WHERE st.departure_time IS NOT NULL;
+        
+# """
+        
+#         testquery = """
+# SELECT 
+#         stop_id,
+#         stop_lat,
+#         stop_lon,
+#         (
+#             6371000 * 2 * ATAN2(
+#                 SQRT(
+#                     SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+#                     COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+#                     SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+#                 ),
+#                 SQRT(1 - (
+#                     SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+#                     COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+#                     SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+#                 ))
+#             )
+#         ) * 3.28084 AS distance_feet
+#     FROM stops
+#     WHERE (
+#         6371000 * 2 * ATAN2(
+#             SQRT(
+#                 SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+#                 COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+#                 SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+#             ),
+#             SQRT(1 - (
+#                 SIN(RADIANS(stop_lat - :user_lat) / 2) * SIN(RADIANS(stop_lat - :user_lat) / 2) +
+#                 COS(RADIANS(:user_lat)) * COS(RADIANS(stop_lat)) *
+#                 SIN(RADIANS(stop_lon - :user_lon) / 2) * SIN(RADIANS(stop_lon - :user_lon) / 2)
+#             ))
+#         )
+#     ) * 3.28084 <= :distance_limit
+#         """
+
+
+#         testquery2 = """
+# SELECT 
+#         t.route_id,
+#         t.branch_letter,
+#         st.trip_id,
+#         st.stop_id,
+#         st.departure_time,
+#         (
+#             CASE
+#                 WHEN CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) >= 24 THEN
+#                     (CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) - 24) * 3600 +
+#                     CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+#                     CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER) + 86400
+#                 ELSE
+#                     CAST(SUBSTR(st.departure_time, 1, 2) AS INTEGER) * 3600 +
+#                     CAST(SUBSTR(st.departure_time, 4, 2) AS INTEGER) * 60 +
+#                     CAST(SUBSTR(st.departure_time, 7, 2) AS INTEGER)
+#             END
+#         ) AS departure_time_seconds,
+#         (CASE 
+#             WHEN t.trip_id LIKE '%Reduced%' THEN 'Reduced'
+#             WHEN t.trip_id LIKE '%Holiday%' THEN 'Holiday'
+#             WHEN t.trip_id LIKE '%Saturday%' THEN 'Saturday'
+#             WHEN t.trip_id LIKE '%Sunday%' THEN 'Sunday'
+#             ELSE 'Weekday'
+#         END) AS schedule_type
+#     FROM stop_times st
+#     JOIN trips t ON st.trip_id = t.trip_id
+#     JOIN nearby_stops ns ON st.stop_id = ns.stop_id
+#     WHERE st.departure_time IS NOT NULL
+#         """
+
+#         testquery3 = """
+# SELECT 
+#         route_id,
+#         branch_letter,
+#         schedule_type,
+#         COUNT(*) AS total_trips,
+#         MIN(departure_time_seconds) AS first_trip,
+#         MAX(departure_time_seconds) AS last_trip,
+#         CASE 
+#             WHEN COUNT(*) > 1 THEN (MAX(departure_time_seconds) - MIN(departure_time_seconds)) / (COUNT(*) - 1) / 60
+#             ELSE NULL
+#         END AS average_frequency,
+#         MIN(departure_time_seconds - LAG(departu
+#         # cursor.execute(testquery, {
+#         #     "user_lat": user_lat,re_time_seconds) OVER (
+#             PARTITION BY route_id, branch_letter, schedule_type ORDER BY departure_time_seconds
+#         )) AS min_frequency_minutes,
+#         MAX(departure_time_seconds - LAG(departure_time_seconds) OVER (
+#             PARTITION BY route_id, branch_letter, schedule_type ORDER BY departure_time_seconds
+#         )) AS max_frequency_minutes
+#     FROM trip_times
+#     GROUP BY route_id, branch_letter, schedule_type        
+# """
+
+
+        # print ("testquery1.txt")
+        # # Execute the query with parameters
+        # cursor = conn.cursor()
+        #     "user_lon": user_lon,
+        #     "distance_limit": distance_limit,
+        #     "frequency_limit": frequency_limit
+        # })
+        # results = cursor.fetchall()
+
+        # # Close the connection
+        # conn.close()
+
+        # with open("testquery.txt", "w") as json_file:
+        #     json.dump(results, json_file, indent=4)
+
+        # print ("testquery3.txt")
+        # # Execute the query with parameters
+        # cursor = conn.cursor()
+        # cursor.execute(testquery3, {
+        #     "user_lat": user_lat,
+        #     "user_lon": user_lon,
+        #     "distance_limit": distance_limit,
+        #     "frequency_limit": frequency_limit
+        # })
+        # results = cursor.fetchall()
+        # print ("testquery3.txt")
+        # # Execute the query with parameters
+        # cursor = conn.cursor()
+        # cursor.execute(testquery3, {
+        #     "user_lat": user_lat,
+        #     "user_lon": user_lon,
+        #     "distance_limit": distance_limit,
+        #     "frequency_limit": frequency_limit
+        # })
+        # results = cursor.fetchall()
+
+        # # Close the connection
+        # conn.close()
+
+        # with open("testquery3.txt", "w") as json_file:
+        #     json.dump(results, json_file, indent=4)
+        # # Close the connection
+        # conn.close()
+
+        # with open("testquery3.txt", "w") as json_file:
+        #     json.dump(results, json_file, indent=4)
+
+        # print ("test1.txt")
+        # # Execute the query with parameters
+        # cursor = conn.cursor()
+        # cursor.execute(test1, {
+        #     "user_lat": user_lat,
+        #     "user_lon": user_lon,
+        #     "distance_limit": distance_limit,
+        #     "frequency_limit": frequency_limit
+        # })
+        # results = cursor.fetchall()
+
+        # # Close the connection
+        # conn.close()
+
+        # with open("test1.txt", "w") as json_file:
+        #     json.dump(results, json_file, indent=4)
+
+        # print ("runschedule.txt")
+        # # Execute the query with parameters
+        # cursor = conn.cursor()
+        # cursor.execute(query, {
+        #     "user_lat": user_lat,
+        #     "user_lon": user_lon,
+        #     "distance_limit": distance_limit,
+        #     "frequency_limit": frequency_limit
+        # })
+        # results = cursor.fetchall()
+
+        # # Close the connection
+        # conn.close()
+
+        # with open("runschedule.txt", "w") as json_file:
+        #     json.dump(results, json_file, indent=4)
+
+        # print ("testquery2.txt")
+        # # Execute the query with parameters
+        # cursor = conn.cursor()
+        # cursor.execute(testquery2, {
+        #     "user_lat": user_lat,
+        #     "user_lon": user_lon,
+        #     "distance_limit": distance_limit,
+        #     "frequency_limit": frequency_limit
+        # })
+        # results = cursor.fetchall()
+
+        # # Close the connection
+        # conn.close()
+
+        # with open("testquery2.txt", "w") as json_file:
+        #     json.dump(results, json_file, indent=4)
+
+
+
+
+        print ("part2")
         # Execute the query with parameters
         cursor = conn.cursor()
-        cursor.execute(query, {
-            "user_lat": user_lat,
-            "user_lon": user_lon,
-            "distance_limit": distance_limit,
-            "frequency_limit": frequency_limit
-        })
-        results = cursor.fetchall()
+        try:
+            cursor.execute(query, {
+                "user_lat": user_lat,
+                "user_lon": user_lon,
+                "distance_limit": distance_limit,
+                "frequency_limit": frequency_limit
+            })
+        except sqlite3.Error as e:
+            print(f"SQL execution error: {e}")
+            print(f"Query: {query}")
+            print(f"Parameters: user_lat={user_lat}, user_lon={user_lon}, distance_limit={distance_limit}, frequency_limit={frequency_limit}")
+            raise  # Re-raise the exception to propagate it
 
+        results = cursor.fetchall()
+        print(results)
         # Close the connection
         conn.close()
 

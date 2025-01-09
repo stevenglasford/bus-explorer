@@ -95,6 +95,68 @@ function updateManualLocation() {
     userLng = lonInput;
     initMarker(userLat, userLng);
 }
+function formatTime(seconds) {
+    if (!seconds || seconds <= 0) return "N/A"; // Handle invalid or null seconds
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+async function populateScheduleTable(data) {
+    const scheduleBody = document.querySelector("#schedule-table tbody");
+    scheduleBody.innerHTML = ""; // Clear existing rows
+
+    data.forEach((row) => {
+        const tr = document.createElement("tr");
+
+        // Route and Branch
+        const routeCell = document.createElement("td");
+        routeCell.textContent = row[0]; // Route ID
+        tr.appendChild(routeCell);
+
+        const branchCell = document.createElement("td");
+        branchCell.textContent = row[1] || "Main"; // Branch Letter or "Main"
+        tr.appendChild(branchCell);
+
+        // Frequency flags
+        ["reduced", "saturday", "sunday", "holiday", "weekday"].forEach((_, index) => {
+            const cell = document.createElement("td");
+            const flag = row[index + 2]; // Schedule flags are at index 2 to 6
+
+            cell.textContent = flag === 0 ? "N/A" : flag === 1 ? "No" : "Yes";
+            cell.style.color = flag === 0 ? "gray" : flag === 1 ? "red" : "green";
+            tr.appendChild(cell);
+        });
+
+        // First run time
+        const firstRunCell = document.createElement("td");
+        firstRunCell.textContent = formatTime(row[7]); // First Run
+        tr.appendChild(firstRunCell);
+
+        // Last run time
+        const lastRunCell = document.createElement("td");
+        lastRunCell.textContent = formatTime(row[8]); // Last Run
+        tr.appendChild(lastRunCell);
+
+        // Total trips
+        const totalTripsCell = document.createElement("td");
+        totalTripsCell.textContent = row[9] || "N/A"; // Total Trips
+        tr.appendChild(totalTripsCell);
+
+        // Most frequent time
+        const mostFreqCell = document.createElement("td");
+        mostFreqCell.textContent = row[10] !== null ? `${row[10]} mins` : "N/A";
+        tr.appendChild(mostFreqCell);
+
+        // Least frequent time
+        const leastFreqCell = document.createElement("td");
+        leastFreqCell.textContent = row[11] !== null ? `${row[11]} mins` : "N/A";
+        tr.appendChild(leastFreqCell);
+
+        scheduleBody.appendChild(tr);
+    });
+}
 
 async function fetchNearbyStops() {
     const distance = document.getElementById("distance").value;
@@ -114,55 +176,26 @@ async function fetchNearbyStops() {
 
         const data = response.data;
 
-        // Clear existing rows
-        const scheduleBody = document.querySelector("#schedule-table tbody");
+        // Populate schedule table
+        populateScheduleTable(data);
+
+        // Clear and populate action table
         const actionBody = document.querySelector("#action-table tbody");
-        scheduleBody.innerHTML = "";
         actionBody.innerHTML = "";
 
         data.forEach((row) => {
-            // Update the schedule table
-            const tr = document.createElement("tr");
-            const scheduleRow = document.createElement("tr");
-
-            const routeCell = document.createElement("td");
-            routeCell.textContent = row[0]; // Route ID
-            scheduleRow.appendChild(routeCell);
-
-            const branchCell1 = document.createElement("td");
-            branchCell1.textContent = row[1] || "Main"; // Branch Letter or "Main"
-
-            scheduleRow.appendChild(branchCell1);
-
-            // Schedule buttons for each schedule type
-            ["reduced", "holiday", "saturday", "sunday", "weekday"].forEach((scheduleType, index) => {
-                const cell = document.createElement("td");
-                const value = row[index + 2];
-
-                if (value === 0) {
-                    cell.textContent = "N/A";
-                    cell.style.color = "#BDC3C7"; // Gray for no trips
-                } else {
-                    cell.textContent = value === 1 ? "No" : "Yes"; // No if frequency doesn't meet
-                    cell.style.color = value === 1 ? "red" : "green";
-                }
-
-                scheduleRow.appendChild(cell);
-            });
-
-            scheduleBody.appendChild(scheduleRow);
-
-            // Update the action table
             const actionRow = document.createElement("tr");
 
+            // Route and Branch
             const routeActionCell = document.createElement("td");
             routeActionCell.textContent = row[0]; // Route ID
             actionRow.appendChild(routeActionCell);
 
-            const branchCell = document.createElement("td");
-            branchCell.textContent = row[1] || "Main"; // Branch Letter or "Main"
-            actionRow.appendChild(branchCell);
+            const branchActionCell = document.createElement("td");
+            branchActionCell.textContent = row[1] || "Main"; // Branch Letter or "Main"
+            actionRow.appendChild(branchActionCell);
 
+            // Show Route button
             const routeButtonCell = document.createElement("td");
             const routeButton = document.createElement("button");
             routeButton.textContent = "Show Route";
@@ -175,6 +208,7 @@ async function fetchNearbyStops() {
             routeButtonCell.appendChild(routeButton);
             actionRow.appendChild(routeButtonCell);
 
+            // Find POIs button
             const poiButtonCell = document.createElement("td");
             const poiButton = document.createElement("button");
             poiButton.textContent = `Find POIs (${row[0]}${row[1] ? ` - ${row[1]}` : ""})`;
@@ -196,6 +230,7 @@ async function fetchNearbyStops() {
         hideLoading();
     }
 }
+
 
 // Fetch POIs for the selected route
 async function fetchPOIs(routeId, branchLetter) {

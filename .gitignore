@@ -27,3 +27,6 @@ gtfs_data/stops.txt
 gtfs_data/trips.txt
 gtfs_data/vehicles.txt
 calculated_stops.json
+test0.txt
+test1.txt
+testquery.txt
