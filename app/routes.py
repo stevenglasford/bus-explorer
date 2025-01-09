@@ -546,6 +546,7 @@ frequency_flags AS (
         max_frequency_minutes,
         CASE 
             WHEN total_trips = 0 THEN 0
+            WHEN total_trips = 1 THEN 1  -- Single trip always red
             WHEN average_frequency > :frequency_limit THEN 1
             ELSE 2
         END AS frequency_flag
